@@ -1,10 +1,9 @@
-import os
-import json
+
 from datetime import datetime
-from flask import render_template, request, jsonify, session, url_for
-from apps.tools.db import query_db, modify_db, get_db, execute_transaction
+from flask import render_template, request, jsonify
+from apps.tools.db import query_db,  execute_transaction
 from apps.tools.permissions import get_current_user_info
-from apps.tools.auth import login_required, permission_required
+from apps.tools.auth import permission_required
 from apps.tools.deepseekapi import analyze_work_order_performance, recommend_relevant_devices
 from .route import bp_orders
 
@@ -331,21 +330,117 @@ def api_settle_submit():
 
     # 2. 扣减物资库存 & 写入物资日志
     for m in materials:
-        # 扣库存
-        operations.append(("UPDATE material_stock SET quantity = quantity - ? WHERE id = ?", (m['qty'], m['id'])))
-        # 记日志
+        # 转换数量格式
+        consume_qty = int(m['qty'])       # 消耗的数量 (用于计算总价)
+        change_qty = -consume_qty         # 变动的数量 (负数)
+        
+        # ---------------------------------------------------------
+        # 步骤 A: 扣减库存 (保持不变)
+        # ---------------------------------------------------------
+        stock_update_sql = "UPDATE material_stock SET quantity = quantity - ? WHERE id = ?"
+        operations.append((stock_update_sql, (consume_qty, m['id'])))
+
+        # ---------------------------------------------------------
+        # 步骤 B: 记日志 (包含 id_use_department)
+        # 修改点：
+        # 1. INSERT 字段列表增加了 id_use_department
+        # 2. SELECT 列表增加了一个子查询 (SELECT id_created_department FROM work_orders WHERE id = ?)
+        # ---------------------------------------------------------
         log_mat_sql = """
-            INSERT INTO material_logs (material_name, change_qty, action_type, work_order_id, operator, created_at)
-            VALUES (?, ?, '工单消耗', ?, ?, ?)
+            INSERT INTO material_logs (
+                material_name, 
+                model, 
+                spec, 
+                change_qty, 
+                price, 
+                total_cost, 
+                action_type, 
+                work_order_id, 
+                operator, 
+                created_at, 
+                hospital_name, 
+                id_hospital,
+                id_use_department   -- 【新增字段】
+            )
+            SELECT 
+                name,               -- material_name
+                model,              -- model
+                spec,               -- spec
+                ?,                  -- change_qty (参数1)
+                price,              -- price
+                (price * ?),        -- total_cost (参数2)
+                '工单消耗',          -- action_type
+                ?,                  -- work_order_id (参数3)
+                ?,                  -- operator (参数4)
+                ?,                  -- created_at (参数5)
+                hospital_name,      -- hospital_name
+                id_hospital,        -- id_hospital
+                (SELECT id_created_department FROM work_orders WHERE id = ?) -- 【新增子查询】(参数6)
+            FROM material_stock 
+            WHERE id = ?            -- (参数7)
         """
-        operations.append((log_mat_sql, (m['name'], -int(m['qty']), work_id, user['username'], current_time)))
+        
+        # 参数必须严格对应 SQL 中 ? 的顺序
+        log_params = (
+            change_qty,        # 1. 变动数量
+            consume_qty,       # 2. 消耗数量(算钱用)
+            work_id,           # 3. 填入 work_order_id 字段
+            user['username'],  # 4. 操作人
+            current_time,      # 5. 时间
+            work_id,           # 6. 【新增】给子查询用的 work_id，用来查部门
+            m['id']            # 7. WHERE id = ? (物资ID)
+        )
+        
+        operations.append((log_mat_sql, log_params))
 
     # 3. 写入工单流转日志
+    # ---------------------------------------------------------
+    # 步骤 C: 格式化详细信息 (包括物资明细)
+    # ---------------------------------------------------------
+    material_details_list = []
+    total_materials_cost = 0 # 用于累加所有物料的总价
+
+    if materials: # 仅当有物料时才生成物料明细
+        for m in materials:
+            # 假设 material_logs 中记录的 price 是单价
+            # 并且我们之前已经通过 SQL 计算了 total_cost
+            # 但这里我们在 Python 中需要的是当前传递过来的 m['price'] 来计算显示的总价
+            # 或者，如果我们知道 m 字典里本身就带了 total_cost (通过前面SQL逻辑写入后，如果需要再查出来)
+            # 考虑到效率，直接用 price * qty 会更直接
+            material_price = float(m.get('price', 0)) # 获取单价，防止price不存在
+            consume_qty = int(m['qty'])
+            item_total_cost = material_price * consume_qty
+            total_materials_cost += item_total_cost # 累加总成本
+
+            material_info = (
+                f"  - {m['name']}"
+                f"(型号:{m.get('model', '无')}, 规格:{m.get('spec', '无')})"
+                f" 数量:{consume_qty} {m.get('unit', '')}" # 假设有 unit 字段
+                f", 单价:{material_price:.2f}"
+                f", 小计:{item_total_cost:.2f}"
+            )
+            material_details_list.append(material_info)
+        
+        material_details_str = "\n".join(material_details_list)
+    else:
+        material_details_str = "  无"
+
+    # 构建完整的 details 字符串
+    log_detail = (
+        f"结算完成。\n"
+        f"总分: {scores.get('total_score', '无')}\n"
+        f"参与人员: {staff_str or '无'}\n"
+        f"设备ID: {device_id or '未关联'}\n"
+        f"备注: {remark or '无'}\n"
+        f"消耗物资明细:\n{material_details_str}\n"
+        f"本次物料总计消耗金额: {total_materials_cost:.2f}" # 显示累计的总金额
+    )
+
     log_work_sql = """
         INSERT INTO work_order_logs (work_id, action, operator_name, details, staff, created_at)
         VALUES (?, '完工信息补全', ?, ?, ?, ?)
     """
-    log_detail = f"结算完成。总分:{scores.get('total_score')}。物料数:{len(materials)}"
+    
     operations.append((log_work_sql, (work_id, user['username'], log_detail, staff_str, current_time)))
     # 4. 写入设备生命周期日志
     if device_id:

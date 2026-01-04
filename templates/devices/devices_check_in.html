@@ -135,7 +135,10 @@
                 <li class="layui-timeline-item">
                     <i class="layui-icon layui-timeline-axis layui-icon-circle-dot"></i>
                     <div class="layui-timeline-content layui-text">
-                        <div style="font-size: 13px; font-weight: 700;">{{ log.occur_time[:16] }}</div>
+                        <!-- ✅ 正确代码 (新写法) -->
+                        <div style="font-size: 13px; font-weight: 700;">
+                            {{ log.occur_time.strftime('%Y-%m-%d %H:%M') if log.occur_time else '' }}
+                        </div>
                         <div class="log-box">
                             {{ log.work_content }}
                             <div style="text-align: right; margin-top: 5px; color: #999; font-size: 11px;">经办人：{{ log.staff }}</div>

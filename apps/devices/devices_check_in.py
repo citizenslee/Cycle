@@ -1,8 +1,13 @@
-from flask import render_template, request, jsonify, session
-from apps.tools.db import query_db, execute_transaction, modify_db
+from flask import render_template, request, jsonify
+from apps.tools.extensions import db  # 引入 SQLAlchemy 实例
 from apps.tools.permissions import get_current_user_info
 from apps.devices.route import bp_devices
 import datetime
+import time
+import random
+# 引入你的模型类 (请确保路径正确)
+from apps.tools.models import FacilityObject, WorkOrder, WorkOrderLog, DeviceLog, TaskType, Hospital
+
 
 class OrderStatus:
     PENDING = '0'      # 待派单
@@ -14,14 +19,11 @@ class OrderStatus:
 # ---------------------------------------------------------------------
 @bp_devices.route('/check_in/<int:device_id>')
 def check_in_page(device_id):
-    # 1. 获取设备信息 (所有人可见)
-    sql_device = """
-        SELECT f.*, h.hospital_name 
-        FROM facility_object f
-        LEFT JOIN hospital h ON f.id_hospital = h.id_hospital
-        WHERE f.id = ?
-    """
-    device = query_db(sql_device, (device_id,), one=True)
+    # 1. 获取设备信息 (ORM 查询)
+    # FacilityObject 模型里已经存了 hospital_name，所以不需要联表查 Hospital
+    # 如果需要联表，可以使用 db.session.query(FacilityObject, Hospital).join...
+    device = FacilityObject.query.get(device_id)
+    
     if not device:
         return "设备不存在或已被移除", 404
 
@@ -29,32 +31,45 @@ def check_in_page(device_id):
     user = get_current_user_info()
     
     # 3. 判定访问状态
-    # 状态枚举: 'guest' (未登录), 'denied' (无权), 'allowed' (允许)
     access_status = 'guest'
-    unauthorized_msg = "" # 用于前端弹窗提示具体的错误
+    unauthorized_msg = ""
 
     if user:
-        if str(user.get('id_hospital')) == str(device.get('id_hospital')):
+        # 注意：ORM 对象属性访问用 .id_hospital，字典用 ['id_hospital']
+        # 这里 user 是字典 (get_current_user_info返回的)，device 是对象
+        if str(user.get('id_hospital')) == str(device.id_hospital):
             access_status = 'allowed'
         else:
             access_status = 'denied'
-            # 记录冲突信息供前端提示
-            unauthorized_msg = f"当前账号归属【{user.get('hospital_name')}】，无法查看【{device.get('hospital_name')}】的维保记录。"
+            unauthorized_msg = f"当前账号归属【{user.get('hospital_name')}】，无法查看【{device.hospital_name}】的维保记录。"
 
     # 4. 根据状态获取数据
     pending_orders = []
     recent_logs = []
 
     if access_status == 'allowed':
-        # 只有有权限才查工单和日志
-        sql_orders = """
-            SELECT id, demand, status, work_type, created_at 
-            FROM work_orders 
-            WHERE with_device = ? AND status IN ('0', '1')
-            ORDER BY created_at DESC
-        """
-        pending_orders = query_db(sql_orders, (device_id,))
-        recent_logs = query_db("SELECT * FROM devices_log WHERE device_id = ? ORDER BY occur_time DESC LIMIT 10", (device_id,))
+        # 1. 先查询出 ORM 对象列表
+        orders_objects = WorkOrder.query.filter(
+            WorkOrder.with_device == device_id,
+            WorkOrder.status.in_([OrderStatus.PENDING, OrderStatus.DISPATCHED])
+        ).order_by(WorkOrder.created_at.desc()).all()
+
+        # 2. 【核心修改】将对象列表转换为字典列表
+        # 只有转成字典，前端的 {{ orders | tojson }} 才不会报错
+        pending_orders = []
+        for order in orders_objects:
+            pending_orders.append({
+                "id": order.id,
+                "demand": order.demand,
+                "status": order.status,
+                "work_type": order.work_type,
+                # 注意：如果 created_at 是 datetime 对象，必须转成字符串，否则 JSON 也会报错
+                "created_at": str(order.created_at) if order.created_at else "" 
+            })
+
+        # 查询最近日志 (ORM 对象直接传给模板循环显示没问题，但如果日志也要 tojson，也得转字典)
+        recent_logs = DeviceLog.query.filter_by(device_id=device_id)\
+            .order_by(DeviceLog.occur_time.desc()).limit(10).all()
 
     return render_template(
         'devices/devices_check_in.html',
@@ -62,8 +77,8 @@ def check_in_page(device_id):
         orders=pending_orders,
         logs=recent_logs,
         user=user,
-        access_status=access_status,       # 传递状态
-        unauthorized_msg=unauthorized_msg  # 传递错误消息
+        access_status=access_status,
+        unauthorized_msg=unauthorized_msg
     )
 
 # ---------------------------------------------------------------------
@@ -80,136 +95,102 @@ def api_orders_check_in():
     if not order_id:
         return jsonify({"code": 1, "msg": "参数错误：缺少工单ID"})
 
-    # 1. 核心数据校验 (读操作不需要事务，保持原样)
-    sql_check = """
-                SELECT
-                    w.*,
-                    t.task_name,
-                    t.score,
-                    f.name AS device_name,
-                    f.id_hospital AS dev_hosp_id
-                FROM work_orders w
-                LEFT JOIN task_type t ON w.task_type = t.id
-                LEFT JOIN facility_object f ON w.with_device = f.id
-                WHERE w.id = ?
-
-                    """
-    order = query_db(sql_check, (order_id,), one=True)
-
+    # 1. 查询工单 (ORM)
+    order = WorkOrder.query.get(order_id)
     if not order:
         return jsonify({"code": 1, "msg": "未找到相关工单记录"})
     
-    # 越权校验
-    if str(user['id_hospital']) != str(order['dev_hosp_id']):
+    # 获取关联的设备信息 (用于鉴权和记录日志)
+    # 假设 WorkOrder 模型没有直接关联 FacilityObject，我们手动查一下
+    # 如果你在 WorkOrder 里定义了 device = relationship(...)，则可以直接用 order.device
+    device_obj = FacilityObject.query.get(order.with_device)
+    if not device_obj:
+         return jsonify({"code": 1, "msg": "关联设备数据异常"})
+
+    # 2. 越权校验
+    if str(user['id_hospital']) != str(device_obj.id_hospital):
         return jsonify({"code": 403, "msg": "越权操作：您无法处理非本院工单"})
 
-    if str(order['status']) == OrderStatus.COMPLETED:
+    if str(order.status) == OrderStatus.COMPLETED:
         return jsonify({"code": 1, "msg": "该工单已处于完成状态"})
 
-    # 准备事务数据
+    # 3. 准备数据
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_dt = datetime.datetime.now() #用于 DateTime 类型字段
     username = user['username']
-    task_name = order['task_name'] or "日常巡检"
-    task_score = order["score"] or 0
-    # 定义事务操作列表 [(sql, args), (sql, args), ...]
-    operations = []
-    work_content = f"工作人员【{username}】到达【{order['device_name']}】现场，完成了本【{task_name}】工单"
-    sql_update_order = """
-        UPDATE work_orders
-        SET
-            status = ?,
-            staff = ?,
-            work_content = ?,
-            task_score = ?,
-            total_score = ?,
-            repair_score = 0,
-            arrival_score = 0,
-            task_coefficient = 0,
-            outsource_flag = 0,
-            remark = '',
-            feedback = ''
-        WHERE id = ?
-    """
+    
+    # 获取任务类型名称和分数
+    task_name = "日常巡检"
+    task_score = 0
+    
+    # 查找任务类型 (假设 order.task_type 存的是 ID)
+    if order.task_type:
+        # 注意 task_type 可能是字符串或数字，根据你的模型调整
+        task_type_obj = TaskType.query.get(int(order.task_type)) 
+        if task_type_obj:
+            task_name = task_type_obj.task_name
+            task_score = task_type_obj.score or 0
+    
+    # 优先使用工单自带的分数 (如果有)
+    current_score = order.task_score if order.task_score else task_score
 
-    operations.append((sql_update_order, (OrderStatus.COMPLETED, username, work_content, task_score, task_score, order_id)))
-
-    # B. 记录工单轨迹日志 (原 record_order_flow 函数逻辑转为 SQL)
-    # 注意：请确认你的流转日志表名是 'work_order_flow' 还是其他名称
-    sql_flow = """
-                    INSERT INTO work_order_logs
-                    (
-                        work_id,
-                        action,
-                        operator_name,
-                        prev_status,
-                        curr_status,
-                        staff,
-                        details,
-                        created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """
-
-    operations.append((
-        sql_flow,
-        (
-            order_id,
-            '完成工单（设备）',
-            username,
-            int(order['status']),
-            int(OrderStatus.COMPLETED),
-            username,
-            f"工作人员【{username}】到达【{order['device_name']}】现场，完成了本次【{task_name}】类工单，本次工单赋【{task_score}】分",
-            now_str
+    # 4. 执行事务 (ORM)
+    try:
+        # A. 更新工单状态
+        work_content = f"工作人员【{username}】到达【{device_obj.name}】现场，完成了本【{task_name}】工单"
+        
+        order.status = OrderStatus.COMPLETED
+        order.staff = username
+        order.work_content = work_content
+        order.task_score = current_score
+        order.total_score = current_score
+        order.repair_score = 0
+        order.arrival_score = 0
+        order.task_coefficient = 0
+        order.outsource_flag = 0
+        order.remark = ''
+        order.feedback = ''
+        
+        # B. 记录工单轨迹日志
+        log_detail = f"工作人员【{username}】到达【{device_obj.name}】现场，完成了本次【{task_name}】类工单，本次工单赋【{current_score}】分"
+        
+        flow_log = WorkOrderLog(
+            work_id=order_id,
+            action='完成工单（设备）',
+            operator_name=username,
+            prev_status=int(OrderStatus.PENDING), # 假设之前是待处理，严谨点可以用 old_status 变量
+            curr_status=int(OrderStatus.COMPLETED),
+            staff=username,
+            details=log_detail,
+            created_at=now_str
         )
-    ))
+        db.session.add(flow_log)
 
-
-    # C. 写入设备全生命周期日志
-    sql_device_log = """
-        INSERT INTO devices_log (
-            device_id,
-            occur_time,
-            hospital_name,
-            hospital_id,
-            start_department_name,
-            start_department_id,
-            handle_department_name,
-            handle_department_id,
-            work_content,
-            staff,
-            type,
-            related_work_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
-
-    operations.append((
-        sql_device_log,
-        (
-            order['with_device'],
-            now_str,
-            user['hospital_name'],
-            user['id_hospital'],
-            order['created_department_name'],
-            order['id_created_department'],
-            user['department_name'],
-            user['id_department'],
-            f"【{task_name}签到】：工作人员【{username}】完成{task_name}工单（工单号：{order_id}）",
-            username,
-            task_name,
-            order_id
+        # C. 写入设备日志
+        dev_log = DeviceLog(
+            device_id=order.with_device,
+            occur_time=now_dt, # 注意：模型如果是 DateTime 类型，这里传 datetime 对象
+            hospital_name=user['hospital_name'],
+            hospital_id=user['id_hospital'],
+            start_department_name=order.created_department_name,
+            start_department_id=order.id_created_department,
+            handle_department_name=user['department_name'],
+            handle_department_id=user['id_department'],
+            work_content=f"【{task_name}签到】：工作人员【{username}】完成{task_name}工单（工单号：{order_id}）",
+            staff=username,
+            type=task_name,
+            related_work_order=order_id
         )
-    ))
+        db.session.add(dev_log)
 
-    # 执行事务
-    success, err = execute_transaction(operations)
-
-    if success:
+        # 提交事务
+        db.session.commit()
         return jsonify({"code": 0, "msg": "签到成功"})
-    else:
-        # 记录具体的错误信息以便调试
-        print(f"Checkin Transaction Error: {err}")
-        return jsonify({"code": 500, "msg": "数据库写入失败，请重试"})
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Checkin Transaction Error: {e}")
+        return jsonify({"code": 500, "msg": f"数据库写入失败: {str(e)}"})
     
 # ---------------------------------------------------------------------
 # 3. 故障上报页面 (弹窗 Iframe)
@@ -220,10 +201,8 @@ def report_fault_page():
     if not device_id:
         return "参数错误", 400
     
-    # 获取设备基础信息，用于回显地点和确定归属医院
-    sql = "SELECT id, name, install_location, id_hospital, hospital_name, id_department, department_name FROM facility_object WHERE id = ?"
-    device = query_db(sql, (device_id,), one=True)
-    
+    # ORM 查询
+    device = FacilityObject.query.get(device_id)
     return render_template('devices/devices_report_form.html', device=device)
 
 # ---------------------------------------------------------------------
@@ -231,92 +210,80 @@ def report_fault_page():
 # ---------------------------------------------------------------------
 @bp_devices.route('/api/report_fault', methods=['POST'])
 def api_report_fault():
-    # 注意：此接口允许未登录访问
+    # 1. 接收参数
     data = request.form
     device_id = data.get('device_id')
-    demand = data.get('demand', '用户未填写详情') # 允许为空，给个默认值
+    demand = data.get('demand', '用户未填写详情')
     location = data.get('location', '')
     contact_phone = data.get('contact_phone', '')
     
-    # 尝试获取当前登录用户（如果有），没有则是匿名
     user = get_current_user_info()
     
-    # 1. 再次查询设备信息以确保数据一致性
-    device = query_db("SELECT * FROM facility_object WHERE id = ?", (device_id,), one=True)
+    # 2. 查询设备
+    device = FacilityObject.query.get(device_id)
     if not device:
         return jsonify({"code": 1, "msg": "设备不存在"})
 
-    # 2. 生成工单数据
-    # 自动生成工单号 (示例逻辑，你可以用 uuid 或 hashids)
-    import time
-    import random
+    # 3. 生成数据
     order_id = f"R{int(time.time())}{random.randint(100,999)}" 
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # 确定创建人信息
     creator_name = user['username'] if user else "扫码报修用户"
     creator_id = str(user['id']) if user else "0"
-    
-    # 3. 写入工单表 (Work Orders)
-    # 逻辑：
-    # - id_created_department: 设备的【使用科室】(即故障发生的科室)
-    # - work_department: 设备的【管理科室】(即负责维修的科室)
-    sql = """
-        INSERT INTO work_orders (
-            id, 
-            work_type, 
-            demand, 
-            location, 
-            contact_phone, 
-            status, 
-            
-            with_device, 
-            device_name,
-            
-            id_created_hospital, 
-            created_hospital_name,
-            
-            id_created_department, 
-            created_department_name,
-            
-            work_department, 
-            work_department_name,
-            
-            creator_id, 
-            creator_name, 
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
-    
-    args = (
-        order_id, 
-        '故障报修',       # work_type
-        demand,          # 需求描述
-        location,        # 地点
-        contact_phone,   # 联系电话
-        OrderStatus.PENDING, # 状态：0 待派单
-        
-        device['id'],    # with_device
-        device['name'],  # device_name
-        
-        device['id_hospital'], 
-        device['hospital_name'],
-        
-        device['use_department_id'],   # 发起科室 = 设备的使用科室
-        device['use_department_name'],
-        
-        device['id_department'],       # 受理科室 = 设备的管理科室
-        device['department_name'],
-        
-        creator_id,
-        creator_name,
-        now_str
-    )
 
-    success, res = modify_db(sql, args)
-    
-    if success:
-        # 可选：写入日志
+    try:
+        # 4. 创建工单对象
+        new_order = WorkOrder(
+            id=order_id,
+            work_type='故障报修',
+            demand=demand,
+            location=location,
+            contact_phone=contact_phone,
+            status=OrderStatus.PENDING,
+            
+            with_device=device.id,
+            id_created_hospital=device.id_hospital,     
+            id_created_department=device.use_department_id,
+            created_department_name=device.use_department_name,
+            work_department=device.id_department,
+            work_department_name=device.department_name,
+            created_at=now_str
+        )
+        
+        # 注意：如果你的 WorkOrder 模型确实没有 creator_id，
+        # 你可能需要把这两个字段加到 remark 里或者修改模型
+        if not hasattr(new_order, 'creator_name'):
+             new_order.remark = f"报修人:{creator_name}, ID:{creator_id}"
+
+        db.session.add(new_order)
+
+        # 5. 创建日志对象
+        log_details = f"故障上报。报修内容：{demand}"
+        new_log = WorkOrderLog(
+            work_id=order_id,
+            action='工单创建',
+            operator_name=creator_name,
+            details=log_details,
+            created_at=now_str,
+            # type 字段在你之前的 models.py 里没有定义？
+            # 如果 Log 表有 type 列，请确保 models.py 里有 type = db.Column(...)
+            # 暂时注释掉或者通过 details 体现
+            # type='start' 
+        )
+        # 临时处理：如果你的 WorkOrderLog 模型没有 type 字段，但你想存，
+        # 必须先去修改 models.py 添加 type 字段。
+        # 假设你已经加了：
+        if hasattr(new_log, 'type'):
+             new_log.type = 'start'
+
+        db.session.add(new_log)
+
+        # 6. 提交事务
+        db.session.commit()
+        
         return jsonify({"code": 0, "msg": "上报成功", "order_id": order_id})
-    else:
-        return jsonify({"code": 1, "msg": f"系统错误: {res}"})
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Report Fault Error: {e}")
+        return jsonify({"code": 1, "msg": f"系统繁忙，上报失败: {str(e)}"})

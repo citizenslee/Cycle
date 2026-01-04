@@ -40,7 +40,20 @@
         .log-time { color: #999; font-size: 13px; }
 
         /* 内容详情 */
-        .log-content { background: #f9f9f9; padding: 12px; border-radius: 4px; color: #555; font-size: 14px; line-height: 1.6; border: 1px dashed #eee; }
+        .log-content { 
+            background: #f9f9f9; 
+            padding: 12px; 
+            border-radius: 4px; 
+            color: #555; 
+            font-size: 14px; 
+            line-height: 1.6; 
+            border: 1px dashed #eee;
+            
+            /* 核心修改：添加此属性以支持 \n 换行 */
+            white-space: pre-wrap; 
+            word-wrap: break-word; /* 防止长单词撑破容器 */
+        }
+
         .log-footer { margin-top: 12px; text-align: right; font-size: 13px; color: #888; }
         .operator { color: #333; font-weight: 500; margin-left: 5px; }
 

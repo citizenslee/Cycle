@@ -1,5 +1,5 @@
 from flask import render_template, request, jsonify
-from apps.tools.db import query_db, modify_db, execute_transaction
+from apps.tools.db import query_db, execute_transaction
 from apps.tools.permissions import get_current_user_info
 from apps.tools.auth import login_required
 from .route import bp_orders
@@ -40,7 +40,7 @@ def evaluate_page(order_id):
         'cost': mat_res['total_cost'] if mat_res and mat_res['total_cost'] else 0,
         'count': mat_res['kind_count'] if mat_res else 0
     }
-
+    print(material_data)
     # 4. 【修改点】查询委外费用 (适配 outsourcing_records 表)
     outsource_data = {'cost': 0, 'company': '无'}
     
