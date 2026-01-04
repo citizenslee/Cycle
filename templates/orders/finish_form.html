@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>完工填报</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+  <script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+  <style>
+    body { background-color: #f7f8fa; padding: 15px; font-family: -apple-system, sans-serif; }
+    .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+    
+    /* 表单控件 */
+    .form-label { font-weight: 600; font-size: 14px; margin-bottom: 10px; display: block; color: #333; }
+    .layui-textarea { border: 1px solid #eee; background: #f9f9f9; border-radius: 8px; resize: none; transition: 0.3s; }
+    .layui-textarea:focus { border-color: #1E9FFF; background: #fff; }
+
+    /* 图片上传区域 */
+    .upload-grid { display: grid; grid-template-columns: repeat(auto-fill, 80px); gap: 10px; margin-top: 10px; }
+    .upload-btn {
+      width: 80px; height: 80px; border: 1px dashed #ccc; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; background: #fafafa;
+    }
+    .photo-item { position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden; }
+    .photo-item img { width: 100%; height: 100%; object-fit: cover; }
+    .photo-del {
+      position: absolute; top: 0; right: 0; width: 20px; height: 20px;
+      background: rgba(0,0,0,0.5); color: #fff; text-align: center;
+      line-height: 20px; cursor: pointer; border-bottom-left-radius: 6px; font-size: 14px;
+    }
+
+    /* 按钮 */
+    .btn-submit {
+      width: 100%; margin-top: 30px; height: 44px; border-radius: 22px;
+      background: linear-gradient(135deg, #1E9FFF 0%, #0072ff 100%);
+      border: none; font-size: 16px; font-weight: 600; box-shadow: 0 4px 10px rgba(30, 159, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <form class="layui-form" id="finishForm">
+    <!-- 隐式接收工单ID -->
+    <input type="hidden" name="work_id" value="{{ request.args.get('id') }}">
+
+    <div style="margin-bottom: 20px;">
+      <label class="form-label">🛠️ 工作内容描述</label>
+      <textarea name="summary" required lay-verify="required" placeholder="请详细描述处理过程和结果..." class="layui-textarea" style="height: 120px;"></textarea>
+    </div>
+
+    <div>
+      <label class="form-label">📷 完工照片 <span style="font-weight:normal; color:#999; font-size:12px;">(可选，最多5张)</span></label>
+      <div class="upload-grid">
+        <div id="previewContainer" style="display:contents;"></div>
+        <div class="upload-btn" id="btnAddPhoto">
+          <i class="layui-icon layui-icon-camera" style="font-size: 24px; color: #ccc;"></i>
+        </div>
+      </div>
+      <input type="file" id="realFileInput" accept="image/*" multiple style="display:none;">
+    </div>
+
+    <button class="layui-btn btn-submit" lay-submit lay-filter="submitFinish">确认完工</button>
+  </form>
+</div>
+
+<script>
+layui.use(['form', 'layer', 'jquery'], function(){
+  var form = layui.form, layer = layui.layer, $ = layui.jquery;
+  
+  // 图片处理逻辑
+  var fileList = [];
+  var MAX_PHOTOS = 5;
+
+  $('#btnAddPhoto').click(function(){ $('#realFileInput').click(); });
+
+  $('#realFileInput').change(function(e){
+    var files = e.target.files;
+    if(fileList.length + files.length > MAX_PHOTOS) {
+      layer.msg('最多只能上传 ' + MAX_PHOTOS + ' 张照片');
+      return;
+    }
+    
+    for(var i=0; i<files.length; i++){
+      fileList.push(files[i]);
+      var reader = new FileReader();
+      (function(file){
+        reader.onload = function(evt){
+          var html = `
+            <div class="photo-item">
+              <img src="${evt.target.result}">
+              <div class="photo-del" onclick="removePhoto(this)">×</div>
+            </div>`;
+          $('#previewContainer').append(html);
+        }
+      })(files[i]);
+      reader.readAsDataURL(files[i]);
+    }
+    $(this).val(''); // 重置input以便重复选择
+    checkBtnStatus();
+  });
+
+  window.removePhoto = function(el) {
+    var item = $(el).parent();
+    var index = $('#previewContainer .photo-item').index(item);
+    fileList.splice(index, 1);
+    item.remove();
+    checkBtnStatus();
+  }
+
+  function checkBtnStatus() {
+    if(fileList.length >= MAX_PHOTOS) $('#btnAddPhoto').hide();
+    else $('#btnAddPhoto').show();
+  }
+
+  // 提交表单
+  form.on('submit(submitFinish)', function(data){
+    var formData = new FormData();
+    formData.append('work_id', data.field.work_id);
+    formData.append('summary', data.field.summary);
+    
+    fileList.forEach(function(file){
+      formData.append('photos[]', file);
+    });
+
+    var loadIdx = layer.load(2);
+
+    $.ajax({
+      url: '/orders/api/work_order/finish_submit', // 后端接口地址
+      type: 'POST',
+      data: formData,
+      processData: false,
+      contentType: false,
+      success: function(res){
+        layer.close(loadIdx);
+        if(res.code === 0){
+          layer.msg('完工填报成功', {icon: 1, time: 1000}, function(){
+            // 关闭 iframe 并刷新父页面
+            var index = parent.layer.getFrameIndex(window.name); 
+            parent.layer.close(index);
+            parent.location.reload(); 
+          });
+        } else {
+          layer.msg(res.msg || '提交失败', {icon: 2});
+        }
+      },
+      error: function(){
+        layer.close(loadIdx);
+        layer.msg('网络错误', {icon: 2});
+      }
+    });
+    return false; // 阻止表单默认跳转
+  });
+});
+</script>
+</body>
+</html>

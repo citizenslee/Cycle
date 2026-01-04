@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}用户登录 - 智慧EHS工作台{% endblock %}
+
+{% block styles %}
+<style>
+  :root {
+    --primary-blue: #3b82f6;
+    --primary-hover: #2563eb;
+    --card-bg: rgba(30, 41, 59, 0.6);
+    --border-white: rgba(255, 255, 255, 0.12);
+  }
+
+  body { padding-top: 0 !important; background: #000; overflow: hidden; font-family: -apple-system, system-ui, sans-serif; }
+  
+  .video-background { position: fixed; top: 50%; left: 50%; min-width: 100%; min-height: 100%; z-index: 0; transform: translate(-50%, -50%); object-fit: cover; filter: brightness(0.8); }
+  .video-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.4) 100%); z-index: 1; }
+
+  .login-wrapper { position: relative; z-index: 2; height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+  .login-card { 
+    width: 340px; padding: 35px 25px; 
+    background: var(--card-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-white); border-radius: 20px; 
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); color: #fff; 
+  }
+  
+  .login-title { font-size: 24px; font-weight: 800; text-align: center; margin-bottom: 8px; color: #fff; }
+  .login-subtitle { text-align: center; color: #94a3b8; font-size: 13px; margin-bottom: 25px; }
+
+  /* 账号列表 */
+  .account-item {
+      background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-white);
+      border-radius: 12px; padding: 14px; margin-bottom: 12px; cursor: pointer; transition: 0.2s;
+  }
+  .account-item:hover { background: rgba(59, 130, 246, 0.15); border-color: var(--primary-blue); }
+  .acc-user { font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; }
+  .acc-role { font-size: 11px; background: var(--primary-blue); padding: 2px 6px; border-radius: 4px; }
+  .acc-info { font-size: 12px; color: #64748b; margin-top: 5px; }
+
+  /* 输入框 */
+  .form-group { margin-bottom: 18px; position: relative; }
+  .custom-input { 
+    background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-white); 
+    color: #fff; padding: 0 15px 0 40px; height: 46px; width: 100%; 
+    box-sizing: border-box; border-radius: 8px; font-size: 14px;
+  }
+  .form-group i { position: absolute; left: 12px; top: 14px; color: #64748b; font-size: 18px; }
+
+  /* --- 滑块验证核心修复 --- */
+  .slide-verify-box { 
+    width: 280px; /* 必须固定为 280 */
+    margin: 0 auto 20px; border-radius: 8px; overflow: hidden; 
+    border: 1px solid var(--border-white); background: #000;
+  }
+  .slide-img-container { 
+    position: relative; width: 280px; height: 150px; /* 严格对应后台尺寸 */
+  }
+  .slide-bg { width: 280px; height: 150px; display: block; }
+  .slide-piece { 
+    position: absolute; top: 0; left: 0; 
+    width: 50px; height: 50px; /* 强制固定拼图块大小，防止缩放 */
+    z-index: 10;
+  }
+  .slide-refresh-btn { 
+    position: absolute; right: 8px; top: 8px; z-index: 20; 
+    color: #fff; cursor: pointer; background: rgba(0,0,0,0.5); 
+    width: 26px; height: 26px; border-radius: 50%; 
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .slide-drag-bar { 
+    position: relative; width: 280px; height: 40px; background: rgba(255,255,255,0.1); 
+  }
+  .slide-drag-text { line-height: 40px; text-align: center; color: #94a3b8; font-size: 12px; }
+  .slide-handler { 
+    position: absolute; top: 2px; left: 2px; width: 36px; height: 36px; 
+    background: #fff; border-radius: 6px; cursor: pointer; 
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 5px rgba(0,0,0,0.3); z-index: 30;
+  }
+  .slide-handler i { color: #333; font-size: 16px; }
+  
+  .slide-success .slide-handler { background: #10b981 !important; }
+  .slide-success .slide-handler i { color: #fff; }
+
+  .btn-submit { width: 100%; height: 46px; background: var(--primary-blue); border: none; border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer; }
+  .btn-disabled { background: #475569; cursor: not-allowed; opacity: 0.6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<video autoplay muted loop playsinline class="video-background">
+  <source src="{{ url_for('static', filename='photo/nebula.mp4') }}" type="video/mp4">
+</video>
+<div class="video-overlay"></div>
+
+<div class="login-wrapper">
+  <div class="login-card">
+    
+    <div id="fastLoginBox" style="display: none;">
+        <div class="login-title">账号识别</div>
+        <div class="login-subtitle">识别到此设备最近登录过</div>
+        <div id="accountList"></div>
+        <p style="text-align: center; margin-top: 15px;">
+            <a href="javascript:;" onclick="showNormalLogin()" style="color: var(--primary-blue); font-size: 13px;">使用其他账号登录</a>
+        </p>
+    </div>
+
+    <div id="normalLoginBox">
+        <div class="login-title">Cycle智慧工作流</div>
+        <div class="login-subtitle">请登录您的账号</div>
+        <form class="layui-form">
+          <input type="hidden" id="csrf_token" name="csrf_token" value="{{ csrf_token() }}">
+          
+          <div class="form-group">
+            <i class="layui-icon layui-icon-username"></i>
+            <input type="text" name="username" required lay-verify="required" placeholder="账号" class="custom-input">
+          </div>
+          
+          <div class="form-group">
+            <i class="layui-icon layui-icon-password"></i>
+            <input type="password" name="password" required lay-verify="required" placeholder="密码" class="custom-input">
+          </div>
+
+          <div class="slide-verify-box">
+            <div class="slide-img-container">
+              <img src="" class="slide-bg" id="slideBg">
+              <img src="" class="slide-piece" id="slidePiece">
+              <div class="slide-refresh-btn" onclick="initSlide()">
+                  <i class="layui-icon layui-icon-refresh"></i>
+              </div>
+            </div>
+            <div class="slide-drag-bar">
+              <div class="slide-drag-text" id="dragText">向右滑动完成安全验证</div>
+              <div class="slide-handler" id="dragHandler"><i class="layui-icon layui-icon-right"></i></div>
+            </div>
+          </div>
+
+          <button class="btn-submit btn-disabled" id="loginBtn" lay-submit lay-filter="doLogin" disabled>请先完成验证</button>
+        </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['form', 'layer', 'jquery'], function(){
+    var form = layui.form, layer = layui.layer, $ = layui.jquery;
+
+    var isVerified = false, isDragging = false, startX = 0;
+    var maxMove = 280 - 50; // 图片宽度280 - 拼图块宽度50 = 230像素
+    
+    var handler = $('#dragHandler'); 
+    var slidePiece = $('#slidePiece');
+
+    function getBrowserDeviceId() {
+        let deviceId = localStorage.getItem('app_device_id');
+        if (!deviceId) {
+            deviceId = 'DEV-' + Math.random().toString(36).substr(2, 9).toUpperCase() + '-' + Date.now();
+            localStorage.setItem('app_device_id', deviceId);
+        }
+        return deviceId;
+    }
+
+    window.initSlide = function() {
+        isVerified = false;
+        isDragging = false;
+        slidePiece.css('left', '0px');
+        handler.css('left', '2px').removeClass('slide-success');
+        handler.find('i').attr('class', 'layui-icon layui-icon-right');
+        $('#dragText').text('向右滑动完成安全验证').css('color', '#94a3b8');
+        $('#loginBtn').addClass('btn-disabled').prop('disabled', true).text('请先完成验证');
+
+        $.get("{{ url_for('login.get_slide_data') }}", function(res){
+            if(res.code === 0){
+                $('#slideBg').attr('src', res.bg_image);
+                $('#slidePiece').attr('src', res.piece_image);
+                $('#slidePiece').css('top', res.piece_y + 'px');
+            }
+        });
+    };
+
+    function getClientX(e) {
+        return (e.type.indexOf('touch') !== -1) ? e.originalEvent.touches[0].clientX : e.clientX;
+    }
+
+    handler.on('mousedown touchstart', function(e){
+        if(isVerified) return;
+        isDragging = true;
+        startX = getClientX(e);
+        handler.css('transition', 'none');
+        slidePiece.css('transition', 'none');
+    });
+
+    $(document).on('mousemove touchmove', function(e){
+        if(!isDragging || isVerified) return;
+        var moveX = getClientX(e) - startX;
+        
+        if(moveX < 0) moveX = 0;
+        if(moveX > maxMove) moveX = maxMove;
+        
+        // 这里的 2 是 slide-handler 的 CSS left 初始值
+        handler.css('left', (moveX + 2) + 'px');
+        slidePiece.css('left', moveX + 'px');
+    });
+
+    $(document).on('mouseup touchend', function(e){
+        if(!isDragging || isVerified) return;
+        isDragging = false;
+        var finalX = parseFloat(slidePiece.css('left'));
+
+        $.ajax({
+            url: "{{ url_for('login.verify_slide') }}",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ x: Math.round(finalX) }),
+            success: function(res){
+                if(res.code === 0){
+                    isVerified = true;
+                    handler.addClass('slide-success');
+                    handler.find('i').attr('class', 'layui-icon layui-icon-ok');
+                    $('#dragText').text('验证通过').css('color', '#10b981');
+                    $('#loginBtn').removeClass('btn-disabled').prop('disabled', false).text('立即登录');
+                } else {
+                    handler.css('transition', 'all 0.3s').css('left', '2px');
+                    slidePiece.css('transition', 'all 0.3s').css('left', '0px');
+                    layer.msg('验证失败，请重试');
+                }
+            }
+        });
+    });
+
+    form.on('submit(doLogin)', function(data){
+        var btn = $(data.elem);
+        btn.text('正在登录...').prop('disabled', true);
+        data.field.device_id = getBrowserDeviceId();
+
+        $.post("{{ url_for('login.login') }}", data.field, function(res) {
+            if (res.code === 0) {
+                location.href = res.redirect_url;
+            } else {
+                layer.msg(res.msg);
+                initSlide();
+                btn.text('立即登录').prop('disabled', false);
+            }
+        });
+        return false;
+    });
+
+    function checkCurrentDevice() {
+        let deviceId = getBrowserDeviceId();
+        $.ajax({
+            url: "{{ url_for('login.check_device') }}",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ device_id: deviceId }),
+            success: function(res) {
+                if (res.code === 0 && res.accounts.length > 0) {
+                    let html = '';
+                    res.accounts.forEach((acc) => {
+                        html += `
+                        <div class="account-item" onclick="executeFastLogin(${acc.id})">
+                            <div class="acc-user">${acc.username} <span class="acc-role">${acc.role_name}</span></div>
+                            <div class="acc-info">${acc.hospital} | ${acc.department}</div>
+                        </div>`;
+                    });
+                    $('#accountList').html(html);
+                    $('#normalLoginBox').hide();
+                    $('#fastLoginBox').show();
+                } else {
+                    initSlide();
+                }
+            }
+        });
+    }
+
+    window.executeFastLogin = function(userId) {
+        $.ajax({
+            url: "{{ url_for('login.fast_login') }}",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ device_id: getBrowserDeviceId(), user_id: userId }),
+            success: function(res) {
+                if (res.code === 0) {
+                    location.href = "/";
+                } else {
+                    layer.msg(res.msg);
+                    showNormalLogin();
+                }
+            }
+        });
+    };
+
+    window.showNormalLogin = function() {
+        $('#fastLoginBox').hide();
+        $('#normalLoginBox').show();
+        initSlide();
+    };
+
+    $(function() {
+        checkCurrentDevice();
+    });
+});
+</script>
+{% endblock %}

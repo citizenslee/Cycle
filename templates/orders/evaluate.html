@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>工单评价</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { background-color: #f2f2f2; padding: 20px; }
+        .layui-card { border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .info-label { color: #888; font-size: 13px; margin-bottom: 4px; }
+        .info-value { color: #333; font-weight: 500; font-size: 15px; margin-bottom: 12px; }
+        .cost-highlight { color: #ff5722; font-weight: bold; font-size: 16px; }
+        .score-container { text-align: center; padding: 20px 0; background: #fff; border-radius: 8px; }
+        .score-desc { font-size: 14px; color: #666; margin-top: 5px; }
+        
+        /* 不同的星级对应的颜色微调 */
+        .score-level-1 { color: #999; }
+        .score-level-2 { color: #666; }
+        .score-level-3 { color: #1E9FFF; }
+        .score-level-4 { color: #FFB800; }
+        .score-level-5 { color: #FF5722; }
+    </style>
+</head>
+<body>
+
+<div class="layui-container" style="max-width: 800px;">
+    
+    <!-- 1. 工单基本信息卡片 -->
+    <div class="layui-card">
+        <div class="layui-card-header">
+            <strong>工单概览</strong>
+            <span class="layui-badge layui-bg-blue" style="margin-left: 10px;">{{ order.id }}</span>
+            <button class="layui-btn layui-btn-xs layui-btn-primary" style="float: right; margin-top: 10px;" id="btnTimeline">
+                <i class="layui-icon layui-icon-time"></i> 查看详情
+            </button>
+        </div>
+        <div class="layui-card-body">
+            <div class="layui-row layui-col-space15">
+                <div class="layui-col-xs6">
+                    <div class="info-label">需求内容</div>
+                    <div class="info-value">{{ order.demand }}</div>
+                </div>
+                <div class="layui-col-xs6">
+                    <div class="info-label">所在位置</div>
+                    <div class="info-value">{{ order.location }}</div>
+                </div>
+                <div class="layui-col-xs12">
+                    <div class="info-label">处理情况</div>
+                    <div class="info-value" style="background: #f8f9fa; padding: 10px; border-radius: 4px;">
+                        {{ order.work_content or '无详细记录' }}
+                    </div>
+                </div>
+                <div class="layui-col-xs6">
+                    <div class="info-label">处理人员</div>
+                    <div class="info-value"><i class="layui-icon layui-icon-user"></i> {{ order.staff }}</div>
+                </div>
+                <div class="layui-col-xs6">
+                    <div class="info-label">受理科室</div>
+                    <div class="info-value">{{ order.work_department_name }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 资源消耗统计 -->
+    <div class="layui-card">
+        <div class="layui-card-header"><strong>资源与成本统计</strong></div>
+        <div class="layui-card-body">
+            <table class="layui-table" lay-skin="line">
+                <colgroup>
+                    <col width="120">
+                    <col>
+                    <col width="120">
+                </colgroup>
+                <tbody>
+                    <!-- 关联设备 -->
+                    <tr>
+                        <td style="color:#666;">关联设备</td>
+                        <td colspan="2">
+                            {% if device %}
+                                <span class="layui-badge-dot layui-bg-green"></span> 
+                                {{ device.name }} ({{ device.model }}) - {{ device.install_location }}
+                            {% else %}
+                                <span style="color:#ccc;">无关联设备</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <!-- 物资消耗 -->
+                    <tr>
+                        <td style="color:#666;">物资消耗</td>
+                        <td>共使用了 {{ material.count }} 种耗材</td>
+                        <td class="cost-highlight">¥ {{ material.cost }}</td>
+                    </tr>
+                    <!-- 委外费用 -->
+                    <tr>
+                        <td style="color:#666;">委外情况</td>
+                        <td>
+                            {% if order.outsource_flag == 1 %}
+                                <span class="layui-badge layui-bg-orange">是</span> 
+                                委外单位: {{ outsource.company }}
+                            {% else %}
+                                <span class="layui-badge layui-bg-gray">否</span> 自主处理
+                            {% endif %}
+                        </td>
+                        <td class="cost-highlight">
+                            {% if order.outsource_flag == 1 %}
+                                ¥ {{ outsource.cost }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 3. 评价表单 -->
+    <div class="layui-card">
+        <div class="layui-card-header" style="border-bottom: 1px solid #eee;">
+            <strong style="font-size: 16px;">服务评价</strong>
+        </div>
+        <div class="layui-card-body" style="padding: 30px;">
+            
+            <!-- 星级评分 -->
+            <div class="score-container">
+                <div id="starRate"></div>
+                <div id="scoreText" class="score-desc score-level-3">一般 (不扣分不加分)</div>
+                <input type="hidden" id="starValue" value="3">
+            </div>
+
+            <!-- 文字反馈 -->
+            <div class="layui-form-item layui-form-text" style="margin-top: 20px;">
+                <label class="layui-form-label" style="width: auto; padding-left: 0;">意见反馈</label>
+                <div class="layui-input-block" style="margin-left: 0;">
+                    <textarea id="feedback" placeholder="请输入您的具体意见或建议，帮助我们改进服务..." class="layui-textarea"></textarea>
+                </div>
+            </div>
+
+            <!-- 按钮组 -->
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="layui-btn layui-btn-normal layui-btn-lg" id="btnSubmit" style="width: 200px;">
+                    提交评价
+                </button>
+                <button class="layui-btn layui-btn-primary layui-btn-lg" onclick="closeWindow()">
+                    关闭
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    layui.use(['rate', 'layer', 'jquery'], function(){
+        var rate = layui.rate;
+        var layer = layui.layer;
+        var $ = layui.jquery;
+        var workId = "{{ order.id }}";
+
+        // 1. 初始化评分组件 (保持不变)
+        rate.render({
+            elem: '#starRate',
+            value: 3, 
+            text: false, 
+            theme: '#FFB800', 
+            choose: function(value){
+                $('#starValue').val(value);
+                updateScoreText(value);
+            }
+        });
+
+        // 2. 动态更新评分文案 (保持不变)
+        function updateScoreText(val) {
+            var texts = {
+                1: { t: '非常不满意 (评分-2)', c: 'score-level-1' },
+                2: { t: '不满意 (评分-1)', c: 'score-level-2' },
+                3: { t: '一般', c: 'score-level-3' },
+                4: { t: '满意 (评分+1)', c: 'score-level-4' },
+                5: { t: '非常满意 (评分+2)', c: 'score-level-5' }
+            };
+            var item = texts[val];
+            $('#scoreText').text(item.t).removeClass().addClass('score-desc ' + item.c);
+        }
+
+        // 3. 查看时间线按钮 (保持不变)
+        $('#btnTimeline').on('click', function(){
+            layer.open({
+                type: 2, title: '工单全流程记录', shadeClose: true, shade: 0.3, area: ['600px', '90%'],
+                content: '/orders/flow/' + workId 
+            });
+        });
+
+        // 4. 提交评价 【核心修改部分】
+        $('#btnSubmit').on('click', function(){
+            var stars = parseInt($('#starValue').val()); // 确保是数字
+            var feedback = $.trim($('#feedback').val()); // 去除前后空格
+
+            // 校验逻辑：3星对应0分，小于3星即为负分
+            if(stars < 3 && feedback === '') {
+                // 弹窗提示，图标使用警告(7)
+                layer.msg('评分较低（低于3星），请务必填写改进建议或理由', {icon: 7, anim: 6});
+                
+                // 视觉反馈：输入框边框变红（需要CSS支持layui-form-danger）或直接聚焦
+                $('#feedback').focus().css('border-color', '#FF5722');
+                
+                // 监听一次输入，输入后恢复边框颜色
+                $('#feedback').one('input', function(){
+                    $(this).css('border-color', '');
+                });
+                return;
+            }
+
+            var loadIdx = layer.load(2);
+            $.ajax({
+                url: '/orders/api/evaluate/submit',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    work_id: workId,
+                    stars: stars,
+                    feedback: feedback
+                }),
+                success: function(res) {
+                    layer.close(loadIdx);
+                    if(res.code === 0) {
+                        layer.msg('评价成功，感谢您的反馈！', {icon: 1, time: 2000}, function(){
+                            if(window.parent && window.parent.layui.table){
+                                window.parent.layui.table.reload('workorderTable');
+                            }
+                            var index = parent.layer.getFrameIndex(window.name);
+                            parent.layer.close(index);
+                        });
+                    } else {
+                        layer.msg(res.msg, {icon: 2});
+                    }
+                },
+                error: function() {
+                    layer.close(loadIdx);
+                    layer.msg('服务器请求失败', {icon: 2});
+                }
+            });
+        });
+
+        window.closeWindow = function() {
+            var index = parent.layer.getFrameIndex(window.name);
+            parent.layer.close(index);
+        }
+    });
+</script>
+</body>
+</html>

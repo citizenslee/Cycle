@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>设备信息展示</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .box { max-width: 600px; margin: auto; }
+        pre { background: #f6f6f6; padding: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>当前访问设备信息</h2>
+    <pre id="result">加载中...</pre>
+</div>
+
+<script>
+const data = {
+    device_id: localStorage.getItem("device_id")
+};
+console.log(localStorage)
+fetch("/system/device_info", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(data)
+})
+.then(res => res.json())
+.then(res => {
+    document.getElementById("result").textContent =
+        JSON.stringify(res, null, 4);
+});
+</script>
+
+</body>
+</html>

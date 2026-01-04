@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>打卡签到</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+
+    <style>
+        body { background: #f5f7fa; color: #333; }
+        .wx-card {
+            max-width: 420px;
+            margin: 30px auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 25px 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.06);
+        }
+        .wx-title { font-size: 20px; font-weight: 600; text-align: center; margin-bottom: 20px; }
+        .info-row { margin-bottom: 15px; font-size: 14px; line-height: 1.6; }
+        .label { color: #888; display: inline-block; width: 70px; }
+        .val { font-weight: 500; }
+        
+        /* 状态框样式 */
+        .status-box {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            display: none; /* 默认隐藏 */
+        }
+        .status-ok { background: #e6ffeb; color: #009688; border: 1px solid #b7eb8f; }
+        .status-fail { background: #fff1f0; color: #ff5722; border: 1px solid #ffccc7; }
+
+        .btn-area { margin-top: 25px; }
+    </style>
+</head>
+<body>
+
+<div class="wx-card">
+    <div class="wx-title">位置签到确认</div>
+
+    <div class="info-row">
+        <span class="label">基准位置:</span>
+        <span class="val">指定打卡点</span>
+    </div>
+
+    <div class="info-row">
+        <span class="label">我的位置:</span>
+        <span class="val" id="currentLoc">正在定位...</span>
+    </div>
+
+    <div class="info-row">
+        <span class="label">定位精度:</span>
+        <span class="val" id="accuracy">--</span>
+    </div>
+
+    <div class="info-row">
+        <span class="label">距离基准:</span>
+        <span class="val" id="distanceVal">计算中...</span>
+    </div>
+
+    <!-- 状态显示区域 -->
+    <div id="resultBox" class="status-box"></div>
+
+    <div class="btn-area">
+        <button id="submitBtn" class="layui-btn layui-btn-fluid layui-btn-disabled" disabled onclick="doCheckIn()">
+            确认签到
+        </button>
+    </div>
+    
+    <div style="text-align:center; margin-top:15px;">
+        <button class="layui-btn layui-btn-xs layui-btn-primary" onclick="window.location.reload()">刷新定位</button>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    // ==========================================
+    // 1. 配置基准坐标 (纬度, 经度)
+    // ==========================================
+    const TARGET_LAT = 29.388826;
+    const TARGET_LNG = 113.127105;
+    const MAX_DISTANCE = 500; // 允许的最大距离（米）
+
+    // ==========================================
+    // 2. 距离计算算法 (Haversine Formula)
+    // ==========================================
+    function getDistance(lat1, lng1, lat2, lng2) {
+        const R = 6378137; // 地球半径，单位米
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLng/2) * Math.sin(dLng/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const d = R * c;
+        return Math.round(d); // 返回整数米
+    }
+
+    // ==========================================
+    // 3. 获取定位并校验
+    // ==========================================
+    function showLocation() {
+        const locText = document.getElementById("currentLoc");
+        const distText = document.getElementById("distanceVal");
+        const accText = document.getElementById("accuracy");
+        const resBox = document.getElementById("resultBox");
+        const btn = document.getElementById("submitBtn");
+
+        if (!navigator.geolocation) {
+            locText.innerText = "浏览器不支持定位";
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                // 1. 获取当前坐标
+                const curLat = pos.coords.latitude;
+                const curLng = pos.coords.longitude;
+                const accuracy = pos.coords.accuracy;
+
+                // 2. 显示当前坐标
+                locText.innerHTML = curLat.toFixed(6) + ", " + curLng.toFixed(6);
+                accText.innerText = "±" + Math.round(accuracy) + " 米";
+
+                // 3. 计算距离
+                const distance = getDistance(TARGET_LAT, TARGET_LNG, curLat, curLng);
+                distText.innerText = distance + " 米";
+
+                // 4. 判断逻辑
+                resBox.style.display = "block"; // 显示状态框
+                
+                if (distance > MAX_DISTANCE) {
+                    // 超出范围
+                    resBox.className = "status-box status-fail";
+                    resBox.innerHTML = "<i class='layui-icon layui-icon-close-fill'></i> 您已超出范围";
+                    
+                    // 禁用按钮
+                    btn.classList.add("layui-btn-disabled");
+                    btn.classList.remove("layui-btn-normal");
+                    btn.disabled = true;
+                    btn.innerText = "不在考勤范围内";
+                } else {
+                    // 在范围内
+                    resBox.className = "status-box status-ok";
+                    resBox.innerHTML = "<i class='layui-icon layui-icon-ok-circle'></i> 位置验证通过";
+                    
+                    // 启用按钮
+                    btn.classList.remove("layui-btn-disabled");
+                    btn.classList.add("layui-btn-normal");
+                    btn.disabled = false;
+                    btn.innerText = "确认签到";
+                }
+            },
+            function (err) {
+                let msg = "定位失败";
+                if (err.code === 1) msg = "请允许获取定位权限";
+                if (err.code === 2) msg = "GPS信号弱，无法定位";
+                if (err.code === 3) msg = "定位超时";
+                
+                locText.innerText = msg;
+                resBox.style.display = "block";
+                resBox.className = "status-box status-fail";
+                resBox.innerText = msg;
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 8000,
+                maximumAge: 0
+            }
+        );
+    }
+
+    // ==========================================
+    // 4. 签到提交动作
+    // ==========================================
+    function doCheckIn() {
+        layui.layer.confirm('确认提交签到吗？', {title:'提示'}, function(index){
+            // 这里写 Ajax 请求给 Flask 后端
+            // 例如：fetch('/api/checkin', ...)
+            layui.layer.msg('签到提交成功！', {icon: 1});
+            layui.layer.close(index);
+        });
+    }
+
+    // 页面加载即运行
+    layui.use(['layer'], function(){
+        showLocation();
+    });
+</script>
+
+</body>
+</html>

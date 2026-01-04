@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>物资批量请购</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { background-color: #f2f2f2; padding: 15px; }
+        .layui-card { min-height: 600px; }
+        .header-title { font-weight: bold; font-size: 16px; border-left: 4px solid #009688; padding-left: 10px; }
+        /* 数量列高亮 */
+        .layui-table-cell { height: auto; }
+    </style>
+</head>
+
+<body>
+
+<div class="layui-row layui-col-space15">
+    
+    <!-- 左侧：录入区域 -->
+    <div class="layui-col-md4">
+        <div class="layui-card">
+            <div class="layui-card-header header-title">1. 信息录入</div>
+            <div class="layui-card-body">
+                <form class="layui-form" id="inputForm" lay-filter="inputForm">
+                    
+                    <!-- 公共信息 -->
+                    <fieldset class="layui-elem-field layui-field-title" style="margin-top: 0;">
+                        <legend style="font-size: 14px;">公共信息</legend>
+                    </fieldset>
+                    
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">请购事由</label>
+                        <div class="layui-input-block">
+                            <textarea name="reason" id="commonReason" placeholder="本次请购的统一原因/用途" class="layui-textarea" style="min-height: 60px;"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- 物资详情 -->
+                    <fieldset class="layui-elem-field layui-field-title">
+                        <legend style="font-size: 14px;">单项物资</legend>
+                    </fieldset>
+
+                    <div class="layui-form-item">
+                        <label class="layui-form-label"><span style="color:red">*</span>物资名称</label>
+                        <div class="layui-input-block">
+                            <input type="text" name="name" lay-verify="required" placeholder="如：空气开关" class="layui-input">
+                        </div>
+                    </div>
+
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">规格</label>
+                        <div class="layui-input-block">
+                            <input type="text" name="spec" placeholder="如：C32 2P" class="layui-input">
+                        </div>
+                    </div>
+
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">型号</label>
+                        <div class="layui-input-block">
+                            <input type="text" name="model" placeholder="如：ABB S200" class="layui-input">
+                        </div>
+                    </div>
+
+                    <div class="layui-form-item">
+                        <div class="layui-row">
+                            <div class="layui-col-xs6">
+                                <label class="layui-form-label"><span style="color:red">*</span>数量</label>
+                                <div class="layui-input-block">
+                                    <input type="number" name="quantity" lay-verify="required|number" class="layui-input" value="1">
+                                </div>
+                            </div>
+                            <div class="layui-col-xs6">
+                                <label class="layui-form-label">单位</label>
+                                <div class="layui-input-block">
+                                    <input type="text" name="unit" placeholder="个/箱/包" class="layui-input">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">预估单价</label>
+                        <div class="layui-input-block">
+                            <input type="number" name="price" placeholder="0.00" class="layui-input" step="0.01">
+                        </div>
+                    </div>
+
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">备注</label>
+                        <div class="layui-input-block">
+                            <input type="text" name="remark" placeholder="指定品牌、紧急程度等" class="layui-input">
+                        </div>
+                    </div>
+
+                    <div class="layui-form-item" style="text-align: center; margin-top: 30px;">
+                        <button type="button" class="layui-btn layui-btn-normal layui-btn-fluid" lay-submit lay-filter="addToList">
+                            <i class="layui-icon layui-icon-addition"></i> 加入右侧清单
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧：预览与提交 -->
+    <div class="layui-col-md8">
+        <div class="layui-card">
+            <div class="layui-card-header header-title">
+                2. 待提交清单 
+                <span class="layui-badge layui-bg-blue" id="itemCount">0</span>
+                <div style="float: right; font-size: 13px; font-weight: normal; color: #666;">
+                    <i class="layui-icon layui-icon-username"></i> 
+                    申请人：{{ user.department_name }} - {{ user.username }}
+                </div>
+            </div>
+            <div class="layui-card-body">
+                
+                <!-- 预览表格 -->
+                <table id="previewTable" lay-filter="previewTable"></table>
+
+                <!-- 底部提交栏 -->
+                <div style="margin-top: 20px; text-align: right; border-top: 1px solid #eee; padding-top: 20px;">
+                    <button type="button" class="layui-btn layui-btn-lg layui-btn-danger" id="submitBatch">
+                        <i class="layui-icon layui-icon-release"></i> 确认提交所有申请
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- 表格操作列模板 -->
+<script type="text/html" id="tableBar">
+    <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">移除</a>
+</script>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['form', 'table', 'layer', 'jquery'], function () {
+    var form = layui.form,
+        table = layui.table,
+        layer = layui.layer,
+        $ = layui.jquery;
+
+    // 本地缓存数组
+    var cacheData = [];
+
+    // 1. 初始化表格
+    var tableIns = table.render({
+        elem: '#previewTable',
+        data: cacheData,
+        height: 'full-200',
+        cols: [[
+            {field: 'name', title: '物资名称', width: 150, edit: 'text'},
+            {field: 'spec', title: '规格', width: 100, edit: 'text'},
+            {field: 'model', title: '型号', width: 100, edit: 'text'},
+            {field: 'quantity', title: '数量', width: 80, style:'color: #009688; font-weight:bold;', edit: 'text'},
+            {field: 'unit', title: '单位', width: 60, edit: 'text'},
+            {field: 'price', title: '预估价', width: 90, edit: 'text'},
+            {field: 'remark', title: '备注', edit: 'text'},
+            {title: '操作', width: 70, align: 'center', toolbar: '#tableBar'}
+        ]],
+        page: false, 
+        limit: 1000
+    });
+
+    // 2. 监听“加入清单”
+    form.on('submit(addToList)', function (data) {
+        var field = data.field;
+        
+        // 简单校验事由
+        var commonReason = $('#commonReason').val();
+        if(!commonReason){
+            layer.tips('请先填写请购事由', '#commonReason', {tips: 1});
+            $('#commonReason').focus();
+            return false;
+        }
+
+        var newItem = {
+            id: new Date().getTime(), // 临时唯一ID
+            name: field.name,
+            spec: field.spec,
+            model: field.model,
+            quantity: field.quantity,
+            unit: field.unit,
+            price: field.price,
+            remark: field.remark
+        };
+
+        cacheData.push(newItem);
+        
+        // 重载表格显示数据
+        tableIns.reload({ data: cacheData });
+        $('#itemCount').text(cacheData.length);
+
+        // 重置物资表单 (保留事由)
+        // 使用 reset() 会清空所有，这里手动清空指定字段
+        $('#inputForm input').val(''); 
+        $('input[name="quantity"]').val(1);
+        
+        $('input[name="name"]').focus(); // 聚焦回名称框
+
+        return false;
+    });
+
+    // 3. 监听删除
+    table.on('tool(previewTable)', function(obj){
+        if(obj.event === 'del'){
+            var tempId = obj.data.id;
+            cacheData = cacheData.filter(function(item){
+                return item.id !== tempId;
+            });
+            obj.del();
+            // 注意：del() 只是删除了DOM，如果不想 reload 也可以不调用 reload，但为了数据一致性建议 reload
+            // 此时必须 reload 才能更新 cacheData 引用，或者下次操作可能会乱
+            // 为了简单，直接 reload
+            // tableIns.reload({ data: cacheData }); 
+            // 修正：obj.del() 后 layui 内部数据未同步，最好重新 reload
+            tableIns.reload({ data: cacheData });
+            $('#itemCount').text(cacheData.length);
+        }
+    });
+
+    // 4. 监听单元格编辑
+    table.on('edit(previewTable)', function(obj){
+        // 同步更新 cacheData
+        var rowId = obj.data.id;
+        var field = obj.field;
+        var value = obj.value;
+        
+        // 在 cacheData 中找到并更新
+        for(var i=0; i<cacheData.length; i++){
+            if(cacheData[i].id === rowId){
+                cacheData[i][field] = value;
+                break;
+            }
+        }
+    });
+
+    // 5. 提交所有
+    $('#submitBatch').click(function(){
+        if(cacheData.length === 0){
+            layer.msg('清单为空，请先录入物资', {icon: 5, anim: 6});
+            return;
+        }
+
+        var reason = $('#commonReason').val();
+        if(!reason){
+            layer.msg('请填写请购事由', {icon: 5});
+            return;
+        }
+
+        var loadIdx = layer.load(2);
+
+        var payload = {
+            reason: reason,
+            items: cacheData
+        };
+
+        $.ajax({
+            url: '/materials/api/apply',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: function(res){
+                layer.close(loadIdx);
+                if(res.code === 0){
+                    layer.alert(res.msg, {icon: 1}, function(index){
+                        layer.close(index);
+                        // 清空重置
+                        cacheData = [];
+                        tableIns.reload({data: []});
+                        $('#itemCount').text(0);
+                        $('#inputForm input').val('');
+                        $('#commonReason').val('');
+                        $('input[name="quantity"]').val(1);
+                    });
+                } else {
+                    layer.alert(res.msg, {icon: 2});
+                }
+            },
+            error: function(){
+                layer.close(loadIdx);
+                layer.msg('网络请求失败', {icon: 2});
+            }
+        });
+    });
+
+});
+</script>
+
+</body>
+</html>

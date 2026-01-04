@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>委外单位管理</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 10px; background-color: #f2f2f2; }
+        .layui-card { box-shadow: 0 1px 2px 0 rgba(0,0,0,.05); }
+        /* 让禁用的输入框文字颜色更深一点，便于阅读 */
+        .layui-disabled, .layui-disabled:hover { color: #666!important; }
+    </style>
+</head>
+<body>
+
+<div class="layui-fluid">
+    <div class="layui-card">
+        <div class="layui-card-body">
+            
+            <!-- 搜索工具栏 -->
+            <fieldset class="table-search-fieldset">
+                <legend>搜索信息</legend>
+                <div style="margin: 10px;">
+                    <form class="layui-form layui-form-pane" action="">
+                        <div class="layui-form-item">
+                            
+                            <!-- 1. 搜索：医院 -->
+                            <div class="layui-inline">
+                                <label class="layui-form-label">所属医院</label>
+                                <div class="layui-input-inline">
+                                    <select name="search_hospital" lay-filter="search_hospital" id="searchHospital"
+                                            {% if current_level < 90 %}disabled{% endif %}>
+                                        <option value="">全部医院</option>
+                                        {% for h in hospitals %}
+                                        <option value="{{ h.id_hospital }}" 
+                                                {% if current_level < 90 %}selected{% endif %}>
+                                            {{ h.hospital_name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    
+                                    <!-- 锁定时的隐藏域 (关键：确保数据提交) -->
+                                    {% if current_level < 90 %}
+                                    <input type="hidden" name="search_hospital" value="{{ user.id_hospital }}">
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- 2. 搜索：科室 -->
+                            <div class="layui-inline">
+                                <label class="layui-form-label">对接科室</label>
+                                <div class="layui-input-inline">
+                                    {% if current_level < 50 %}
+                                        <!-- [科管] 锁定显示 -->
+                                        <input type="text" class="layui-input layui-disabled" value="{{ user.department_name }}" disabled>
+                                        <input type="hidden" name="search_dept" value="{{ user.id_department }}">
+                                    {% else %}
+                                        <!-- [超管/院管] 下拉筛选 (JS负责加载内容) -->
+                                        <select name="search_dept" id="searchDeptSelect">
+                                            <option value="">全部科室</option>
+                                            <!-- 这里的 option 会由 JS 根据医院ID动态生成或由后端预置 -->
+                                            {% if departments and current_level < 90 %}
+                                                {% for d in departments %}
+                                                <option value="{{ d.id_department }}">{{ d.department_name }}</option>
+                                                {% endfor %}
+                                            {% endif %}
+                                        </select>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- 3. 搜索：关键词 -->
+                            <div class="layui-inline">
+                                <label class="layui-form-label">关键词</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" name="keyword" placeholder="单位名称/描述" autocomplete="off" class="layui-input">
+                                </div>
+                            </div>
+
+                            <div class="layui-inline">
+                                <button type="button" class="layui-btn layui-btn-primary" lay-submit lay-filter="data-search-btn">
+                                    <i class="layui-icon"></i> 搜 索
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </fieldset>
+
+            <!-- 表格区 -->
+            <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+
+            <!-- 头部工具栏 -->
+            <script type="text/html" id="toolbarDemo">
+                <div class="layui-btn-container">
+                    <button class="layui-btn layui-btn-normal layui-btn-sm" lay-event="add">
+                        <i class="layui-icon"></i> 新增单位
+                    </button>
+                </div>
+            </script>
+
+            <!-- 行工具栏 -->
+            <script type="text/html" id="currentTableBar">
+                <a class="layui-btn layui-btn-xs data-count-edit" lay-event="edit">编辑</a>
+                <a class="layui-btn layui-btn-xs layui-btn-danger data-count-delete" lay-event="delete">删除</a>
+            </script>
+            
+            <!-- 状态模板 -->
+            {% raw %}
+            <script type="text/html" id="statusTpl">
+                {{#  if(d.status == 1){ }}
+                <span class="layui-badge layui-bg-green">启用</span>
+                {{#  } else { }}
+                <span class="layui-badge layui-bg-gray">停用</span>
+                {{#  } }}
+            </script>
+            {% endraw %}
+            
+            <!-- 链接列工具栏 -->
+            <script type="text/html" id="linkBar">
+                <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="copy_link" title="复制链接发送给服务商">
+                    <i class="layui-icon layui-icon-link"></i> 复制
+                </a>
+            </script>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑 弹窗表单 -->
+<div id="addEditForm" style="display: none; padding: 20px;">
+    <form class="layui-form" lay-filter="dataForm">
+        <input type="hidden" name="id" value="">
+        
+        <div class="layui-form-item">
+            <label class="layui-form-label required">所属医院</label>
+            <div class="layui-input-block">
+                <select name="id_hospital" id="modalHospitalSelect" lay-filter="modalHospitalSelect" lay-verify="required">
+                    <option value="">请选择医院</option>
+                    {% for h in hospitals %}
+                    <option value="{{ h.id_hospital }}">{{ h.hospital_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label required">对接科室</label>
+            <div class="layui-input-block">
+                <select name="id_department" id="modalDeptSelect" lay-verify="required">
+                    <option value="">请先选择医院</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label required">单位名称</label>
+            <div class="layui-input-block">
+                <input type="text" name="unit_name" lay-verify="required" placeholder="请输入名称" class="layui-input">
+            </div>
+        </div>
+
+        <div class="layui-form-item layui-form-text">
+            <label class="layui-form-label">业务描述</label>
+            <div class="layui-input-block">
+                <textarea name="unit_desc" class="layui-textarea" placeholder="请输入描述"></textarea>
+            </div>
+        </div>
+        
+        <div class="layui-form-item">
+            <label class="layui-form-label">状态</label>
+            <div class="layui-input-block">
+                <input type="radio" name="status" value="1" title="启用" checked>
+                <input type="radio" name="status" value="0" title="停用">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button class="layui-btn" lay-submit lay-filter="saveBtn">确认保存</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    // 1. 数据注入 (确保变量存在)
+    var CURRENT_LEVEL = {{ current_level|default(0) }};
+    var USER_INFO = {{ user | tojson }};
+    // 预加载的科室数据 (可能包含所有医院的科室，用于前端筛选)
+    var ALL_DEPTS = {{ departments | tojson }};
+
+    // 2. 预处理科室数据 (按医院ID分组，提升查找效率)
+    var DEPT_MAP = {};
+    if(ALL_DEPTS && ALL_DEPTS.length > 0){
+        layui.each(ALL_DEPTS, function(index, item){
+            if(!DEPT_MAP[item.id_hospital]) DEPT_MAP[item.id_hospital] = [];
+            DEPT_MAP[item.id_hospital].push(item);
+        });
+    }
+
+    layui.use(['form', 'table'], function () {
+        var $ = layui.jquery,
+            form = layui.form,
+            table = layui.table;
+
+        // --- 通用工具：渲染科室下拉框 ---
+        // elementId: select元素ID
+        // hospitalId: 目标医院ID
+        // defaultVal: 默认选中的科室ID
+        // allowEmpty: 是否包含"全部科室"选项
+        function renderDeptOptions(elementId, hospitalId, defaultVal, allowEmpty) {
+            var $select = $(elementId);
+            $select.empty();
+            if(allowEmpty) $select.append('<option value="">全部科室</option>');
+            else $select.append('<option value="">请选择科室</option>');
+
+            // 只有当选择了医院，才去加载科室
+            if (hospitalId) {
+                // 优先从前端缓存取 (适用于超管/院管预加载)
+                if (DEPT_MAP[hospitalId]) {
+                    $.each(DEPT_MAP[hospitalId], function (i, d) {
+                        var isSelected = (String(d.id_department) === String(defaultVal)) ? 'selected' : '';
+                        $select.append('<option value="' + d.id_department + '" ' + isSelected + '>' + d.department_name + '</option>');
+                    });
+                    form.render('select');
+                } else {
+                    // 如果缓存没数据，尝试 AJAX 获取 (兜底)
+                    $.getJSON('/system/api/get_depts_by_hospital', {id_hospital: hospitalId}, function(res){
+                        if(res.code === 0){
+                            // 更新缓存
+                            DEPT_MAP[hospitalId] = res.data; 
+                            $.each(res.data, function(i, d){
+                                var isSelected = (String(d.id_department) === String(defaultVal)) ? 'selected' : '';
+                                $select.append('<option value="' + d.id_department + '" ' + isSelected + '>' + d.department_name + '</option>');
+                            });
+                        }
+                        form.render('select');
+                    });
+                }
+            } else {
+                form.render('select');
+            }
+        }
+
+        // --- 搜索栏初始化 ---
+        // 如果是超管 (>=90)，监听医院切换
+        form.on('select(search_hospital)', function (data) {
+            if(CURRENT_LEVEL >= 90) {
+                renderDeptOptions('#searchDeptSelect', data.value, '', true);
+            }
+        });
+
+        // --- 表格初始化 ---
+        table.render({
+            elem: '#currentTableId',
+            url: '/orders/api/outsource/list',
+            toolbar: '#toolbarDemo',
+            defaultToolbar: ['filter', 'exports', 'print'],
+            // 初始参数: 如果是院管(<90)，初始化时带上本院ID
+            where: {
+                search_hospital: (CURRENT_LEVEL < 90) ? USER_INFO.id_hospital : ''
+            },
+            cols: [[
+                {field: 'id', width: 80, title: 'ID', sort: true},
+                {field: 'unit_name', minWidth: 150, title: '单位名称'},
+                {field: 'hospital_name', width: 120, title: '所属医院'},
+                {field: 'department_name', width: 120, title: '对接科室'},
+                {title: '服务商入口', width: 130, toolbar: '#linkBar', align: "center"},
+                {field: 'status', width: 100, title: '状态', templet: '#statusTpl', align: "center"},
+                {title: '操作', minWidth: 150, toolbar: '#currentTableBar', align: "center"}
+            ]],
+            limits: [10, 15, 20, 25, 50],
+            limit: 10,
+            page: true,
+            skin: 'line'
+        });
+
+        // --- 搜索提交 ---
+        form.on('submit(data-search-btn)', function (data) {
+            var field = data.field;
+            
+            // 🔥 补全被锁定(disabled)的字段
+            if(CURRENT_LEVEL < 90) field.search_hospital = USER_INFO.id_hospital;
+            if(CURRENT_LEVEL < 50) field.search_dept = USER_INFO.id_department;
+            
+            table.reload('currentTableId', {
+                page: { curr: 1 },
+                where: field
+            });
+            return false;
+        });
+
+        // --- 弹窗逻辑 ---
+        table.on('toolbar(currentTableFilter)', function (obj) {
+            if (obj.event === 'add') openDataModal();
+        });
+
+        table.on('tool(currentTableFilter)', function (obj) {
+            var data = obj.data;
+            if (obj.event === 'edit') openDataModal(data);
+            else if (obj.event === 'delete') doDelete(data.id, obj);
+            else if (obj.event === 'copy_link') copyLink(data.vendor_link);
+        });
+
+        function openDataModal(editData) {
+            var title = editData ? '编辑委外单位' : '新增委外单位';
+            
+            layer.open({
+                title: title, type: 1, shade: 0.2, area: ['50%', '600px'],
+                content: $('#addEditForm'),
+                success: function(layero, index) {
+                    $('#addEditForm form')[0].reset();
+                    $('input[name="id"]').val('');
+                    $('#modalHospitalSelect').removeAttr('disabled');
+                    $('#modalDeptSelect').removeAttr('disabled');
+
+                    // 1. 初始化值
+                    var initHosp = editData ? editData.id_hospital : '';
+                    var initDept = editData ? editData.id_department : '';
+
+                    // 2. 权限锁定
+                    if (CURRENT_LEVEL < 90) {
+                        // 院管/科管：锁定本院
+                        initHosp = USER_INFO.id_hospital;
+                        $('#modalHospitalSelect').val(initHosp).attr('disabled', 'disabled');
+                    }
+                    if (CURRENT_LEVEL < 50) {
+                        // 科管：锁定本科室
+                        initDept = USER_INFO.id_department;
+                        $('#modalDeptSelect').attr('disabled', 'disabled');
+                        // 手动构造一个 option 并选中
+                        $('#modalDeptSelect').html('<option value="'+initDept+'" selected>'+USER_INFO.department_name+'</option>');
+                    }
+
+                    // 3. 数据回填 (编辑模式)
+                    if (editData) {
+                        form.val("dataForm", {
+                            "id": editData.id,
+                            "unit_name": editData.unit_name,
+                            "unit_desc": editData.unit_desc,
+                            "status": editData.status.toString(),
+                            "id_hospital": initHosp // 确保选中
+                        });
+                    }
+
+                    // 4. 触发联动加载科室 (仅当没有锁定科室时)
+                    // 如果是科管(Level < 50)，上面已经手动填了，不需要联动
+                    if (CURRENT_LEVEL >= 50) {
+                        renderDeptOptions('#modalDeptSelect', initHosp, initDept, false);
+                    }
+                    
+                    form.render();
+                }
+            });
+        }
+
+        // 弹窗内的二级联动
+        form.on('select(modalHospitalSelect)', function(data){
+            renderDeptOptions('#modalDeptSelect', data.value, '', false);
+        });
+
+        // --- 保存逻辑 ---
+        form.on('submit(saveBtn)', function (data) {
+            var postData = data.field;
+            
+            // 🔥 核心：手动补全被 disabled 的字段
+            if(CURRENT_LEVEL < 90) postData.id_hospital = USER_INFO.id_hospital;
+            if(CURRENT_LEVEL < 50) postData.id_department = USER_INFO.id_department;
+
+            $.post('/orders/api/outsource/save', postData, function(res){
+                if(res.code === 0){
+                    layer.msg('保存成功', {icon: 1, time: 1000}, function(){
+                        layer.closeAll('page');
+                        table.reload('currentTableId');
+                    });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                }
+            });
+            return false;
+        });
+
+        // --- 删除逻辑 ---
+        function doDelete(id, obj) {
+            layer.confirm('确定删除吗？', function (index) {
+                $.post('/orders/api/outsource/delete', {id: id}, function(res){
+                    if(res.code === 0){ obj.del(); layer.close(index); layer.msg('删除成功'); } 
+                    else { layer.msg(res.msg, {icon: 2}); }
+                });
+            });
+        }
+
+        function copyLink(link) {
+            var $temp = $("<input>");
+            $("body").append($temp);
+            $temp.val(link).select();
+            document.execCommand("copy");
+            $temp.remove();
+            layer.msg('链接已复制', {icon: 1, time: 1000});
+        }
+    });
+</script>
+</body>
+</html>

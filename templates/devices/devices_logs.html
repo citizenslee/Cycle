@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>设备全生命周期记录</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        /* 全局基础设置：简约风格 */
+        body { padding: 20px; background-color: #f7f9fc; color: #333; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        
+        /* 筛选栏样式 */
+        .filter-bar {
+            background: #fff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        /* 时间线样式重构 */
+        .layui-timeline-axis { color: #1E9FFF; background: #fff; }
+        .layui-timeline-item:before { background-color: #e8e8e8; } /* 轴线颜色变淡 */
+        
+        /* 核心卡片容器 */
+        .timeline-card {
+            background: #fff;
+            border-radius: 6px;
+            padding: 15px 20px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.03);
+            border-left: 4px solid #ddd; /* 默认边框颜色 */
+            transition: all 0.3s;
+            position: relative;
+        }
+        .timeline-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+        /* 不同类型的边框颜色映射 */
+        .type-repair { border-left-color: #FF5722; } /* 维修-红 */
+        .type-maintain { border-left-color: #1E9FFF; } /* 保养-蓝 */
+        .type-inspect { border-left-color: #009688; } /* 巡检-青 */
+        .type-other { border-left-color: #999; } /* 其他-灰 */
+
+        /* 头部信息行 */
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            padding-bottom: 8px;
+        }
+        .time-text { font-size: 16px; font-weight: 600; color: #333; font-family: Consolas, Monaco, monospace; }
+        
+        /* 标签 Badge 样式 */
+        .tech-badge {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 2px;
+            margin-left: 8px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        .bg-blue { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; }
+        .bg-orange { background: #fff7e6; color: #fa8c16; border: 1px solid #ffd591; }
+        .bg-gray { background: #f5f5f5; color: #8c8c8c; border: 1px solid #d9d9d9; }
+        
+        /* 工单号样式 */
+        .order-no {
+            font-family: Consolas, monospace;
+            color: #666;
+            background: #f0f2f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .order-no:hover { color: #1E9FFF; background: #e6f7ff; }
+
+        /* 内容区 */
+        .card-content { font-size: 14px; color: #555; line-height: 1.6; }
+        .card-footer { margin-top: 10px; font-size: 12px; color: #999; text-align: right; }
+        
+        /* 子设备标识 */
+        .child-indicator {
+            display: inline-flex;
+            align-items: center;
+            color: #FFB800;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 筛选工具栏 -->
+    <div class="filter-bar layui-form">
+        <!-- 时间范围 -->
+        <div style="width: 200px;">
+            <input type="text" class="layui-input" id="dateRange" placeholder="筛选时间范围" readonly>
+        </div>
+
+        <!-- 类型选择 (这里需要你根据实际数据库有的类型来填，或者后端动态加载) -->
+        <div style="width: 150px;">
+            <select id="logType" lay-filter="logType">
+                <option value="">全部类型</option>
+                <option value="维修">维修</option>
+                <option value="保养">保养</option>
+                <option value="巡检">巡检</option>
+                <option value="安装">安装</option>
+                <option value="其他">其他</option>
+            </select>
+        </div>
+
+        <!-- 是否显示子设备开关 -->
+        <div style="display:flex; align-items:center;">
+            <input type="checkbox" id="childSwitch" lay-skin="switch" lay-text="含子设备|仅本机" checked lay-filter="childSwitch">
+        </div>
+        
+        <!-- 刷新按钮 -->
+        <button class="layui-btn layui-btn-normal layui-btn-sm" id="btnSearch" style="margin-left:auto;">
+            <i class="layui-icon layui-icon-search"></i> 刷新
+        </button>
+    </div>
+
+    <!-- 2. 时间线容器 -->
+    <ul class="layui-timeline" id="timelineContainer">
+        <!-- Loading -->
+        <div style="text-align:center; padding:50px; color:#ccc;">
+            <i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop" style="font-size:30px;"></i>
+        </div>
+    </ul>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['jquery', 'layer', 'laydate', 'form'], function(){
+    var $ = layui.jquery;
+    var laydate = layui.laydate;
+    var form = layui.form;
+
+    var currentDeviceId = "{{ device_id }}"; 
+
+    // 初始化时间选择器
+    laydate.render({
+        elem: '#dateRange',
+        range: true,
+        done: function(value){
+            loadData(); // 选中后自动刷新
+        }
+    });
+
+    // 监听类型下拉
+    form.on('select(logType)', function(data){
+        loadData();
+    });
+
+    // 监听子设备开关
+    form.on('switch(childSwitch)', function(data){
+        loadData();
+    });
+    
+    // 按钮点击
+    $('#btnSearch').click(function(){ loadData(); });
+
+    // 初始化加载
+    loadData();
+
+    // === 核心数据加载函数 ===
+    function loadData() {
+        var params = {
+            device_id: currentDeviceId,
+            date_range: $('#dateRange').val(),
+            log_type: $('#logType').val(),
+            show_child: $('#childSwitch').prop('checked') ? '1' : '0'
+        };
+
+        var $container = $('#timelineContainer');
+        // 加载动画
+        $container.html('<div style="text-align:center; padding:40px; color:#999;"><i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i></div>');
+
+        $.get('/devices/api/get_logs', params, function(res) {
+            $container.empty();
+
+            if (res.code !== 0) {
+                return $container.html('<div style="text-align:center;color:red;padding:20px;">' + (res.msg||'错误') + '</div>');
+            }
+            if (!res.data || res.data.length === 0) {
+                return $container.html('<div style="text-align:center; color:#ccc; padding-top:40px;"><i class="layui-icon layui-icon-file" style="font-size:40px;"></i><br>暂无相关记录</div>');
+            }
+
+            var html = '';
+            $.each(res.data, function(i, item) {
+                var order = item.related_work_order || '-';
+                var content = item.work_content || '无详细内容';
+                var staff = item.staff || 'System';
+                var type = item.type || '其他';
+                
+                // 判断是否本机
+                var isSelf = String(item.device_id) === String(currentDeviceId);
+
+                // 根据Type决定样式类 (简单映射)
+                var typeClass = 'type-other';
+                var typeBadgeClass = 'bg-gray';
+                
+                if(type.indexOf('维修') > -1) { typeClass = 'type-repair'; typeBadgeClass = 'bg-orange'; }
+                else if(type.indexOf('保养') > -1) { typeClass = 'type-maintain'; typeBadgeClass = 'bg-blue'; }
+                else if(type.indexOf('巡检') > -1) { typeClass = 'type-inspect'; typeBadgeClass = 'bg-blue'; }
+                
+                // 子设备提示HTML
+                var childHtml = '';
+                if (!isSelf) {
+                    childHtml = `
+                        <span class="child-indicator" title="子级设备事件">
+                            <i class="layui-icon layui-icon-share" style="font-size:12px; margin-right:3px;">子设备：</i>
+                            ${item.device_name}
+                        </span>
+                    `;
+                }
+
+                html += `
+                <li class="layui-timeline-item">
+                    <i class="layui-icon layui-icon-circle layui-timeline-axis"></i>
+                    <div class="layui-timeline-content layui-text">
+                        
+                        <!-- 卡片主体 -->
+                        <div class="timeline-card ${typeClass}">
+                            
+                            <!-- 头部：时间 + 类型 + 来源 -->
+                            <div class="card-header">
+                                <div style="display:flex; align-items:center;">
+                                    <span class="time-text">${item.occur_time}</span>
+                                    <span class="tech-badge ${typeBadgeClass}">${type}</span>
+                                </div>
+                                <div style="display:flex; align-items:center;">
+                                    ${childHtml}
+                                    <span class="order-no" title="关联工单号">NO.${order}</span>
+                                </div>
+                            </div>
+
+                            <!-- 内容 -->
+                            <div class="card-content">
+                                ${content}
+                            </div>
+
+                            <!-- 底部：操作人 -->
+                            <div class="card-footer">
+                                <i class="layui-icon layui-icon-username"></i> ${staff}
+                            </div>
+                        </div>
+
+                    </div>
+                </li>
+                `;
+            });
+            
+            // 底部结束点
+            html += `<li class="layui-timeline-item"><i class="layui-icon layui-icon-circle layui-timeline-axis"></i></li>`;
+            
+            $container.html(html);
+        });
+    }
+});
+</script>
+</body>
+</html>

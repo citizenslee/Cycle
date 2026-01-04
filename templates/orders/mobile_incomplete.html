@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>待办工单</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        /* 全局设置 */
+        body { 
+            /* 1. 修改：背景颜色稍微调深一点点，增加与白色卡片的对比度 */
+            background-color: #eff2f5; 
+            padding: 12px; 
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            color: #333;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* --- 顶部标题栏 --- */
+        .header-box { 
+            background: #fff;
+            padding: 12px 15px; 
+            border-radius: 12px;
+            /* 2. 修改：增加实体边框和稍微明显的阴影 */
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 15px;
+            display: flex;             
+            justify-content: space-between;     
+            align-items: center;
+        }
+        .header-left h3 { margin: 0; font-size: 17px; font-weight: 700; color: #333; }
+        .header-left span { color: #16baaa; }
+        .header-left p { font-size: 12px; color: #999; margin-top: 4px; margin-bottom: 0;}
+        
+        .custom-close-btn {
+            background-color: #f5f5f5;
+            border: 1px solid #e8e8e8; /* 按钮也加个微边框 */
+            color: #666;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex; align-items: center; gap: 4px;
+            transition: all 0.2s;
+        }
+        .custom-close-btn:active { background-color: #e0e0e0; }
+
+        /* --- 卡片主体 --- */
+        .order-card {
+            background: #fff;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            
+            /* 3. 核心修改：增加1px实线边框，颜色为深灰色 */
+            border: 1px solid #dcdcdc; 
+            
+            /* 4. 核心修改：加深阴影，让卡片浮起来的感觉更强 */
+            box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+            
+            overflow: hidden; 
+            position: relative;
+            transition: transform 0.2s;
+            
+            /* 保持左侧状态条逻辑，注意这里会覆盖上面的 border-left */
+            border-left: 5px solid transparent; 
+        }
+        
+        /* 根据状态改变左侧边框颜色 */
+        .order-card[data-status="1"] { border-left-color: #1e9fff; } /* 已派单-蓝 */
+        .order-card[data-status="2"] { border-left-color: #16baaa; } /* 维修中-绿 */
+        .order-card[data-status="11"] { border-left-color: #ffb800; } /* 挂起-橙 */
+        .order-card[data-status="0"] { border-left-color: #d2d2d2; } /* 默认-灰 */
+
+        /* 卡片头部：单号与状态 */
+        .card-header {
+            padding: 12px 15px;
+            /* 内部线条也稍微加深一点 */
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .order-id { font-size: 14px; color: #999; display: flex; align-items: center; gap: 5px;}
+        .order-id i { font-size: 16px; }
+
+        .status-badge {
+            font-size: 12px; padding: 2px 8px; border-radius: 4px; font-weight: 500;
+        }
+        /* 状态颜色定义 */
+        .st-0 { background: #f0f0f0; color: #999; }
+        .st-1 { background: #e6f7ff; color: #1890ff; }
+        .st-2 { background: #f6ffed; color: #52c41a; }
+        .st-3 { background: #e6fffb; color: #13c2c2; }
+        .st-4 { background: #f9f0ff; color: #722ed1; }
+        .st-11 { background: #fffbe6; color: #faad14; }
+        .st-12 { background: #fff2e8; color: #d4380d; }
+        .st-13 { background: #fff1f0; color: #f5222d; }
+
+        /* 卡片内容区 */
+        .card-body { padding: 15px; }
+        
+        /* 信息行布局 */
+        .info-row { 
+            display: flex; 
+            margin-bottom: 8px; 
+            font-size: 14px; 
+            align-items: flex-start;
+            line-height: 1.5;
+        }
+        .info-row i { 
+            font-size: 16px; 
+            color: #c2c2c2; 
+            margin-right: 8px; 
+            margin-top: 2px; 
+            width: 16px; 
+            text-align: center;
+        }
+        .info-content { flex: 1; color: #333; }
+        .info-label { color: #999; margin-right: 5px; font-size: 13px;}
+
+        /* 电话链接 */
+        .phone-link { color: #1e9fff; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center;}
+        .phone-link:active { opacity: 0.7; }
+
+        /* 需求描述框 */
+        .demand-box {
+            background-color: #f8fbfb;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-top: 10px;
+            /* 需求框边框也稍微加深 */
+            border: 1px dashed #ccc;
+        }
+        .demand-title { font-size: 12px; color: #999; margin-bottom: 4px; }
+        .demand-text { font-size: 15px; color: #333; font-weight: 600; line-height: 1.4; }
+
+        /* 按钮组 */
+        .card-footer {
+            padding: 10px 15px 15px 15px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        
+        .layui-btn { 
+            height: 32px; 
+            line-height: 32px; 
+            padding: 0 16px; 
+            font-size: 13px; 
+            border-radius: 16px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        /* 覆盖layui默认样式 */
+        .btn-suspend { background-color: #fff !important; border: 1px solid #ffb800 !important; color: #ffb800 !important; box-shadow: none; }
+        .btn-finish { background-color: #16baaa !important; } 
+        .btn-arrive { background-color: #1e9fff !important; } 
+
+    </style>
+</head>
+<body>
+
+<!-- 头部 -->
+<div class="header-box">
+    <div class="header-left">
+        <h3>当前科室：<span>{{ target_dept_name }}</span></h3>
+        <p>未完成工单列表</p>
+    </div>
+    <button class="custom-close-btn" onclick="closeCurrentIframe()">
+        <i class="layui-icon layui-icon-close"></i> 关闭
+    </button>
+</div>
+
+<div id="list-container">
+    {% if orders %}
+        {% for order in orders %}
+        <!-- 增加data-status用于CSS控制左侧边框颜色 -->
+        <div class="order-card" data-status="{{ order.status }}">
+            
+            <!-- 卡片头部：单号与状态 -->
+            <div class="card-header">
+                <div class="order-id">
+                    <i class="layui-icon layui-icon-form"></i>
+                    <span>NO. {{ order.id }}</span>
+                </div>
+                <!-- 状态显示 -->
+                {% if order.status == '0' %} <span class="status-badge st-0">待派单</span>
+                {% elif order.status == '1' %} <span class="status-badge st-1">已派单</span>
+                {% elif order.status == '2' %} <span class="status-badge st-2">维修中</span>
+                {% elif order.status == '3' %} <span class="status-badge st-3">已完成</span>
+                {% elif order.status == '4' %} <span class="status-badge st-4">待录耗材</span>
+                {% elif order.status == '11' %} <span class="status-badge st-11">已挂起</span>
+                {% elif order.status == '12' %} <span class="status-badge st-12">已委外</span>
+                {% elif order.status == '13' %} <span class="status-badge st-13">已驳回</span>
+                {% else %} <span class="status-badge st-0">状态{{ order.status }}</span>
+                {% endif %}
+            </div>
+
+            <!-- 卡片中间：信息区 -->
+            <div class="card-body">
+                <!-- 时间 -->
+                <div class="info-row">
+                    <i class="layui-icon layui-icon-time"></i>
+                    <div class="info-content">
+                        <span class="info-label">发起时间:</span>{{ order.created_at }}
+                    </div>
+                </div>
+
+                <!-- 位置 -->
+                <div class="info-row">
+                    <i class="layui-icon layui-icon-location"></i>
+                    <div class="info-content">
+                        <span class="info-label">需求位置:</span>{{ order.location or target_dept_name }}
+                    </div>
+                </div>
+
+                <!-- 人员 -->
+                <div class="info-row">
+                    <i class="layui-icon layui-icon-username"></i>
+                    <div class="info-content">
+                        <span class="info-label">处理人员:</span>{{ order.staff or '待定' }}
+                    </div>
+                </div>
+                
+                <!-- 电话 -->
+                <div class="info-row">
+                    <i class="layui-icon layui-icon-cellphone"></i>
+                    <div class="info-content">                       
+                     <span class="info-label">发起方联系方式:</span>
+                        {% if order.contact_phone %}
+                            <a href="tel:{{ order.contact_phone }}" class="phone-link">
+                                {{ order.contact_phone }} <span style="font-size:12px; margin-left:5px; color:#ccc;">(点击拨打)</span>
+                            </a>
+                        {% else %}
+                            <span style="color:#999">无联系电话</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- 需求/故障描述 (重点突出) -->
+                <div class="demand-box">
+                    <div class="demand-title">故障/需求描述</div>
+                    <div class="demand-text">{{ order.demand }}</div>
+                </div>
+            </div>
+
+            <!-- 底部按钮区 -->
+            <div class="card-footer">
+                {% if order.status == '1' or order.status == '2' %}
+                <button class="layui-btn btn-suspend" onclick="doAction('suspend', '{{ order.id }}')">挂起</button>
+                {% endif %}
+
+                {% if order.status == '1' %}
+                <button class="layui-btn btn-arrive" onclick="doAction('arrive', '{{ order.id }}')">
+                    <i class="layui-icon layui-icon-location"></i> 到达现场
+                </button>
+                {% endif %}
+
+                {% if order.status == '2' %}
+                <button class="layui-btn btn-finish" onclick="doAction('finish', '{{ order.id }}')">
+                    <i class="layui-icon layui-icon-ok"></i> 完工填报
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <!-- 空状态美化 -->
+        <div style="text-align: center; padding: 60px 0; color: #999;">
+            <div style="background:#f0f2f5; width:80px; height:80px; border-radius:50%; margin:0 auto 15px; display:flex; align-items:center; justify-content:center; border: 1px solid #e0e0e0;">
+                <i class="layui-icon layui-icon-ok" style="font-size: 40px; color: #ccc;"></i>
+            </div>
+            <p style="margin-top: 10px; font-size:15px;">当前科室暂无待办工单</p>
+        </div>
+    {% endif %}
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    layui.use(['layer', 'jquery'], function(){
+        var layer = layui.layer;
+        var $ = layui.jquery;
+
+        window.closeCurrentIframe = function() {
+            var index = parent.layer.getFrameIndex(window.name); 
+            parent.layer.close(index);
+        };
+
+        window.doAction = function(type, id) {
+            if(type === 'arrive') {
+                layer.confirm('确认已到达现场？', {
+                    title: '签到确认', 
+                    btn: ['确认','取消'],
+                    offset: 'auto'
+                }, function(index){
+                    layer.close(index);
+                    var loadIdx = layer.load(2);
+                    $.post('/orders/api/work_order/arrive/' + id)
+                        .done(function(res){
+                            if(res.code === 0){
+                                layer.msg('已到达', {icon:1, time:1000}, function(){
+                                    location.reload();
+                                });
+                            } else {
+                                layer.msg(res.msg || '操作失败', {icon:2});
+                            }
+                        })
+                        .fail(function(xhr){
+                            let msg = '请求失败';
+                            if (xhr.status === 404) msg = '接口不存在';
+                            else if (xhr.status === 403) msg = '没有权限';
+                            else if (xhr.status === 500) msg = '服务器错误';
+                            layer.msg(msg, {icon:2});
+                        })
+                        .always(function(){
+                            layer.close(loadIdx);
+                        });
+                });
+            }
+else if(type === 'suspend') {
+                layer.prompt({
+                    formType: 2, 
+                    title: '请输入挂起原因', 
+                    area: ['250px', '150px'],
+                    offset: 'auto'
+                }, function(value, index){
+                    var loadIdx = layer.load(2); // 开启加载层
+                    
+                    $.post('/orders/api/work_order/suspend', {work_id: id, reason: value}, function(res){
+                        // --- 成功回调 (HTTP 200) ---
+                        layer.close(index); // 关闭输入框
+                        
+                        if(res.code === 0){
+                            layer.msg('工单已挂起', {icon:1, time:1000}, function(){ location.reload(); });
+                        } else {
+                            layer.msg(res.msg || '操作失败', {icon:2});
+                        }
+                    })
+                    // --- 失败回调 (HTTP 404, 500, etc) ---
+                    .fail(function(xhr){
+                        let msg = '请求失败';
+                        if (xhr.status === 404) msg = '接口不存在';
+                        else if (xhr.status === 403) msg = '没有权限';
+                        else if (xhr.status === 500) msg = '服务器错误';
+                        layer.msg(msg, {icon:2});
+                    })
+                    // --- 总是执行 (清理工作) ---
+                    .always(function(){
+                        layer.close(loadIdx); // 关闭加载层
+                    });
+                });
+            }
+            else if(type === 'finish') {
+                 layer.open({
+                    type: 2,
+                    title: '完工填报',
+                    area: ['100%', '100%'],
+                    content: '/orders/work_order/finish_form?id=' + id, 
+                    end: function(){ location.reload(); }
+                });
+            }
+        };
+    });
+</script>
+</body>
+</html>

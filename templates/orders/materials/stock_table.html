@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>库存查看</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 15px; background-color: #f2f2f2; }
+        .layui-card { box-shadow: 0 1px 2px 0 rgba(0,0,0,.05); }
+        .low-stock { color: #FF5722; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="layui-fluid">
+    <div class="layui-card">
+        <div class="layui-card-header">库存物资一览表</div>
+        <div class="layui-card-body">
+            
+            <!-- 搜索栏 -->
+            <form class="layui-form" style="margin-bottom: 20px;">
+                
+                <!-- 【适配】超管/集团 (Level >= 90) 可筛选医院 -->
+                {% if current_level >= 90 %}
+                <div class="layui-inline">
+                    <div class="layui-input-inline" style="width: 200px;">
+                        <select id="searchHospital" lay-filter="hospitalSelect">
+                            <option value="">全部医院</option>
+                            {% for h in hospitals %}
+                            <option value="{{ h.id_hospital }}">{{ h.hospital_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="layui-inline">
+                    <div class="layui-input-inline" style="width: 250px;">
+                        <input type="text" id="keyword" placeholder="输入名称 / 型号 / 规格 搜索" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-inline">
+                    <button type="button" class="layui-btn layui-btn-normal" id="btnSearch">
+                        <i class="layui-icon layui-icon-search"></i> 查询
+                    </button>
+                    <button type="button" class="layui-btn layui-btn-primary" id="btnReload">
+                        <i class="layui-icon layui-icon-refresh"></i>
+                    </button>
+                </div>
+            </form>
+
+            <!-- 数据表格 -->
+            <table class="layui-hide" id="stockTable" lay-filter="stockTable"></table>
+
+        </div>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    // 获取后端传来的等级，用于控制列显示
+    var CURRENT_LEVEL = {{ current_level }};
+
+    layui.use(['table', 'form', 'jquery'], function(){
+        var table = layui.table,
+            form = layui.form,
+            $ = layui.jquery;
+
+        // 渲染表格
+        var tableIns = table.render({
+            elem: '#stockTable',
+            url: '/materials/api/stock_manager_list', 
+            page: true,
+            limits: [15, 30, 50, 100],
+            limit: 15,
+            cols: [[
+                {field: 'id', title: 'ID', width: 80, sort: true, fixed: 'left'},
+                // 优化：如果是单医院用户(Level < 90)，隐藏"所属医院"列，节省空间
+                {field: 'hospital_name', title: '所属医院', width: 150, sort: true, hide: (CURRENT_LEVEL < 90)}, 
+                {field: 'name', title: '物资名称', minWidth: 150, sort: true},
+                {field: 'model', title: '型号', width: 120},
+                {field: 'spec', title: '规格', width: 120},
+                {field: 'quantity', title: '当前库存', width: 120, sort: true, align: 'center', templet: function(d){
+                    var qty = parseInt(d.quantity);
+                    if(qty < 3) {
+                        return `<span style="color: #FF5722; font-weight: bold;">${qty}</span> 
+                                <span class="layui-badge-dot"></span> 
+                                <span class="layui-badge layui-bg-red" style="font-size:10px; height:16px; line-height:16px;">低</span>`;
+                    } else if (qty < 10) {
+                        return `<span style="color: #FFB800;">${qty}</span>`;
+                    } else {
+                        return `<span style="color: #009688;">${qty}</span>`;
+                    }
+                }},
+                {field: 'unit', title: '单位', width: 60, align: 'center'},
+                {field: 'price', title: '参考单价', width: 100, align: 'right', templet: d => '￥' + (d.price || '0.00')},
+                {field: 'remark', title: '备注', width: 150},
+                {field: 'updated_at', title: '最后更新时间', width: 160, sort: true, style: 'color: #999;'}
+            ]],
+            done: function(res, curr, count){
+                // 简单的库存预警提示
+                var lowStockCount = 0;
+                layui.each(res.data, function(index, item){
+                    if(item.quantity < 3) lowStockCount++;
+                });
+                if(lowStockCount > 0){
+                    layer.msg('当前页有 ' + lowStockCount + ' 项物资库存紧缺', {icon: 7, time: 2000, offset: 'b'});
+                }
+            }
+        });
+
+        // 执行搜索的方法
+        function doSearch(){
+            var key = $('#keyword').val();
+            var hospId = '';
+            
+            // 只有超管页面才有 #searchHospital 元素
+            if(CURRENT_LEVEL >= 90){
+                hospId = $('#searchHospital').val();
+            }
+
+            tableIns.reload({
+                where: { 
+                    keyword: key,
+                    search_hospital: hospId 
+                },
+                page: { curr: 1 }
+            });
+        }
+
+        // 按钮点击事件
+        $('#btnSearch').click(function(){
+            doSearch();
+        });
+
+        // 监听下拉框选择 (选完直接搜)
+        form.on('select(hospitalSelect)', function(data){
+            doSearch();
+        });
+
+        // 刷新按钮
+        $('#btnReload').click(function(){
+            $('#keyword').val('');
+            if(CURRENT_LEVEL >= 90){
+                $('#searchHospital').val('');
+                form.render('select');
+            }
+            doSearch();
+        });
+
+        // 监听回车
+        $('#keyword').on('keydown', function (event) {
+            if (event.keyCode === 13) {
+                doSearch();
+                return false; 
+            }
+        });
+
+    });
+</script>
+</body>
+</html>

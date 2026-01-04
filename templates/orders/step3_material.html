@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>步骤3：物资消耗清单</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { 
+            padding: 20px; background: #f0f2f5; 
+            height: calc(100vh - 40px); overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .main-wrapper { display: flex; gap: 20px; height: 100%; }
+
+        /* 左侧库存检索区 */
+        .left-panel { flex: 1.2; display: flex; flex-direction: column; gap: 15px; }
+        .glass-card { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: flex; flex-direction: column; overflow: hidden; }
+
+        /* 右侧已选消耗区 */
+        .right-panel { flex: 0.8; background: #fff; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e6ebf1; }
+
+        .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #333; display: flex; align-items: center; gap: 8px; }
+        .section-title::before { content: ''; width: 4px; height: 16px; background: #16baaa; border-radius: 2px; }
+
+        /* 搜索条 */
+        .search-bar { margin-bottom: 15px; display: flex; gap: 8px; }
+
+        /* 右侧清单看板 */
+        .selected-header { background: #1e293b; color: #fff; padding: 15px 20px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .selected-list { flex: 1; padding: 15px; overflow-y: auto; background: #f8fafc; }
+        
+        .mat-item-card {
+            background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; padding: 12px; margin-bottom: 12px;
+            display: flex; justify-content: space-between; align-items: center; transition: all 0.3s;
+            animation: slideIn 0.3s;
+        }
+        .mat-item-card:hover { border-color: #16baaa; transform: translateX(5px); }
+        .mat-info { flex: 1; }
+        .mat-name { font-size: 14px; font-weight: bold; color: #1e293b; }
+        .mat-spec { font-size: 12px; color: #64748b; margin-top: 2px; }
+        
+        .mat-ctrl { display: flex; align-items: center; gap: 10px; }
+        .qty-input { width: 50px; height: 30px; text-align: center; border: 1px solid #cbd5e1; border-radius: 6px; font-weight: bold; color: #16baaa; }
+        
+        /* 底部汇总结算 */
+        .summary-bar { background: #fff; padding: 20px; border-radius: 0 0 12px 12px; border-top: 2px dashed #e2e8f0; text-align: right; }
+        .total-label { font-size: 13px; color: #64748b; }
+        .total-amount { font-size: 28px; font-weight: 800; color: #FF5722; margin-left: 5px; }
+
+        /* 表格样式美化 */
+        .layui-table-view { margin: 0; border: none; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    </style>
+</head>
+<body>
+
+<div class="main-wrapper">
+    <!-- 1. 左侧：全院库存检索 (60%) -->
+    <div class="left-panel">
+        <div class="glass-card" style="flex: 1;">
+            <div class="section-title">全院物资仓库检索 (后端实时分页)</div>
+            <div class="search-bar">
+                <input type="text" id="matKey" placeholder="输入名称、型号、规格搜索物资..." class="layui-input" style="border-radius: 6px;">
+                <button class="layui-btn layui-btn-normal" id="btnSearch" style="background-color: #16baaa; border-radius: 6px;">
+                    <i class="layui-icon layui-icon-search"></i>
+                </button>
+            </div>
+            <div style="flex: 1; overflow: hidden;">
+                <table id="stockTable" lay-filter="stockTable"></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 右侧：已选消耗清单 (40%) -->
+    <div class="right-panel">
+        <div class="selected-header">
+            <div><i class="layui-icon layui-icon-cart"></i> 本次消耗清单</div>
+            <div id="item-count" style="font-size: 12px; opacity: 0.8;">已选 0 项</div>
+        </div>
+        
+        <div class="selected-list" id="selectedBox">
+            <!-- 动态渲染 -->
+            <div id="empty-tip" style="text-align:center; padding-top:100px; color:#cbd5e1;">
+                <i class="layui-icon layui-icon-face-surprised" style="font-size: 60px;"></i>
+                <p style="margin-top:10px;">尚未添加任何物资</p>
+            </div>
+        </div>
+
+        <div class="summary-bar">
+            <span class="total-label">预估物料成本：</span>
+            <span style="color:#FF5722; font-weight:bold;">￥</span>
+            <span class="total-amount" id="totalCost">0.00</span>
+        </div>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['table', 'jquery', 'layer'], function(){
+    var table = layui.table, $ = layui.jquery, layer = layui.layer;
+    var workId = parent.WORK_ORDER_DATA.work_id;
+
+    // --- 1. 初始化库存表 (分页加载) ---
+    table.render({
+        elem: '#stockTable',
+        url: '/orders/api/settle/search_stock/' + workId,
+        method: 'post',
+        page: true,
+        limit: 15,
+        height: 'full-180',
+        text: { none: '暂无匹配物资' },
+        cols: [[
+            {field: 'name', title: '物资名称', width: 200, style:'font-weight: bold;'},
+            {field: 'model', title: '型号/规格', templet: d => (d.model || '-') + ' / ' + (d.spec || '-')},
+            {field: 'price', title: '单价', width: 100, templet: d => '<span style="color:#FF5722">￥'+d.price+'</span>'},
+            {field: 'stock_qty', title: '余量', width: 80, style:'color:#16baaa; font-weight:bold;'},
+            {fixed: 'right', title: '操作', width: 60, align:'center', templet: function(){
+                return '<button class="layui-btn layui-btn-xs layui-btn-normal" lay-event="add" style="background:#16baaa"><i class="layui-icon">&#xe654;</i></button>';
+            }}
+        ]]
+    });
+
+    // 搜索执行
+    $('#btnSearch').click(function(){
+        table.reload('stockTable', { where: { keyword: $('#matKey').val() }, page: { curr: 1 } });
+    });
+
+    // --- 2. 物资篮子逻辑 ---
+    // 从父页面获取已有的物资（实现返回后数据不丢失）
+    var basket = parent.WORK_ORDER_DATA.materials || [];
+
+    function renderBasket() {
+        if(basket.length === 0) {
+            $('#empty-tip').show();
+            $('#selectedBox').find('.mat-item-card').remove();
+            $('#totalCost').text('0.00');
+            $('#item-count').text('已选 0 项');
+            return;
+        }
+        $('#empty-tip').hide();
+        var html = '';
+        var total = 0;
+        basket.forEach((item, index) => {
+            var subTotal = item.price * item.qty;
+            total += subTotal;
+            html += `
+            <div class="mat-item-card">
+                <div class="mat-info">
+                    <div class="mat-name">${item.name}</div>
+                    <div class="mat-spec">单价: ￥${item.price} | 规格: ${item.spec || '-'}</div>
+                </div>
+                <div class="mat-ctrl">
+                    <input type="number" class="qty-input" value="${item.qty}" min="1" max="${item.max}" onchange="updateBasketQty(${index}, this.value)">
+                    <i class="layui-icon layui-icon-delete" style="color:#94a3b8; cursor:pointer;" onclick="removeFromBasket(${index})"></i>
+                </div>
+            </div>`;
+        });
+        $('#selectedBox').html(html);
+        $('#totalCost').text(total.toFixed(2));
+        $('#item-count').text('已选 ' + basket.length + ' 项');
+        
+        // 实时同步到父页面
+        parent.WORK_ORDER_DATA.materials = basket;
+        parent.WORK_ORDER_DATA.total_mat_cost = total.toFixed(2);
+    }
+
+    // 添加逻辑
+    table.on('tool(stockTable)', function(obj){
+        if(obj.event === 'add'){
+            var d = obj.data;
+            var exist = basket.find(i => i.id === d.id);
+            if(exist){
+                if(exist.qty < d.stock_qty) exist.qty++;
+                else layer.msg('已达库存上限');
+            } else {
+                basket.push({
+                    id: d.id, name: d.name, price: d.price, 
+                    qty: 1, max: d.stock_qty, spec: d.spec
+                });
+            }
+            renderBasket();
+        }
+    });
+
+    // 移除逻辑
+    window.removeFromBasket = function(index) {
+        basket.splice(index, 1);
+        renderBasket();
+    };
+
+    // 修改数量逻辑
+    window.updateBasketQty = function(index, val) {
+        var qty = parseInt(val);
+        var max = basket[index].max;
+        if(qty > max) { layer.msg('库存不足，最大可用 ' + max); qty = max; }
+        if(qty < 1) qty = 1;
+        basket[index].qty = qty;
+        renderBasket();
+    };
+
+    // 初始化渲染
+    renderBasket();
+
+    // 暴露校验
+    window.validateStep = function() { return true; };
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,538 @@
+<script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+{% block styles %}
+<style>
+    .layui-fluid { padding: 15px; }
+    .search-panel { background: #fff; padding: 15px 15px 5px 15px; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .table-panel { background: #fff; padding: 15px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+/* 1. 强制菜单项内容使用 Flex 布局，实现左对齐 */
+.custom-dropdown-action .layui-menu-body-title {
+    display: flex !important;  /* 开启 Flex 布局 */
+    align-items: center;       /* 垂直居中 */
+    justify-content: flex-start; /* 水平靠左 */
+    padding: 0 15px !important;  /* 左右留出一些内边距 */
+    text-align: left;
+}
+
+/* 2. 图标样式调整 */
+.custom-dropdown-action .custom-menu-icon {
+    margin-right: 12px; /* 图标和文字之间的距离 */
+    font-size: 16px;    /* 图标大小 */
+    width: 20px;        /* 固定宽度：确保即使图标胖瘦不一，文字也能左对齐 */
+    text-align: center; /* 图标在自己的固定宽度里居中 */
+    color: inherit;     /* 继承父级颜色（为了让删除变成红色） */
+}
+
+/* 3. 基础美化（圆角、悬浮背景） */
+.custom-dropdown-action .layui-menu {
+    border-radius: 8px;
+    padding: 6px 4px;
+}
+.custom-dropdown-action .layui-menu li {
+    border-radius: 4px;
+    margin-bottom: 2px;
+    transition: background 0.2s;
+}
+/* 悬浮变色 */
+.custom-dropdown-action .layui-menu li:hover {
+    background-color: #16ec81;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="layui-fluid">
+    <!-- 搜索栏 -->
+    <div class="search-panel">
+        <form class="layui-form" action="">
+            
+            <!-- 第一行：基础筛选 -->
+            <div class="layui-form-item">
+                <!-- 工单号 -->
+                <div class="layui-inline">
+                    <label class="layui-form-label">工单号</label>
+                    <div class="layui-input-inline">
+                        <input type="text" name="id" placeholder="请输入工单ID" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <!-- 日期范围 -->
+                <div class="layui-inline">
+                    <label class="layui-form-label" style="width: auto;">发起日期</label>
+                    <div class="layui-input-inline" style="width:200px;">
+                        <input type="text" name="daterange" id="daterange" placeholder="选择日期范围" class="layui-input" readonly>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第二行：工作类型 (新增) -->
+            <div class="layui-form-item">
+                <label class="layui-form-label">工作类型</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="work_type" value="维修" title="维修" lay-skin="primary">
+                    <input type="checkbox" name="work_type" value="安装" title="安装" lay-skin="primary">
+                    <input type="checkbox" name="work_type" value="巡检" title="巡检" lay-skin="primary">
+                    <input type="checkbox" name="work_type" value="维护" title="维护" lay-skin="primary">
+                    <input type="checkbox" name="work_type" value="保养" title="保养" lay-skin="primary">
+                    <input type="checkbox" name="work_type" value="操作" title="操作" lay-skin="primary">
+                    <input type="checkbox" name="work_type" value="其它" title="其它" lay-skin="primary">
+                </div>
+            </div>
+
+            <!-- 第三行：工单状态 -->
+            <div class="layui-form-item">
+                <label class="layui-form-label">工单状态</label>
+                <div class="layui-input-block">
+                    <!-- 常用状态默认选中，可根据需求调整 -->
+                    <input type="checkbox" name="status" value="0" title="待派单" lay-skin="tag" checked>
+                    <input type="checkbox" name="status" value="1" title="已派单" lay-skin="tag" checked>
+                    <input type="checkbox" name="status" value="2" title="已到达现场" lay-skin="tag" checked>
+                    
+                    <input type="checkbox" name="status" value="3" title="已完成工单" lay-skin="tag">
+                    <input type="checkbox" name="status" value="4" title="已补全信息" lay-skin="tag">
+                    <input type="checkbox" name="status" value="5" title="已完结" lay-skin="tag">
+                    
+                    <input type="checkbox" name="status" value="11" title="已挂起" lay-skin="tag" checked>
+                    <input type="checkbox" name="status" value="12" title="委外处理中" lay-skin="tag" checked>
+                    <input type="checkbox" name="status" value="13" title="已驳回" lay-skin="tag" >
+                </div>
+            </div>
+
+            <!-- 第四行：组织架构筛选 -->
+            <div class="layui-form-item">
+                <!-- 1. 所属医院 -->
+                <div class="layui-inline">
+                    <label class="layui-form-label">所属医院</label>
+                    <div class="layui-input-inline">
+                        <select name="search_hospital" lay-filter="hospitalFilter" lay-search
+                                {% if permissions.lock_hospital %}disabled{% endif %}>
+                            {% if not permissions.lock_hospital %}
+                            <option value="">全部医院</option>
+                            {% endif %}
+                            {% for h in hospitals %}
+                            <option value="{{ h.id_hospital }}" 
+                                    {% if permissions.default_hospital|string == h.id_hospital|string %}selected{% endif %}>
+                                {{ h.hospital_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if permissions.lock_hospital %}
+                        <input type="hidden" name="search_hospital" value="{{ permissions.default_hospital }}">
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- 2. 发起科室 -->
+                <div class="layui-inline">
+                    <label class="layui-form-label">发起科室</label>
+                    <div class="layui-input-inline">
+                        <select name="search_init_dept" id="search_init_dept" lay-filter="initDeptFilter" lay-search 
+                                {% if permissions.lock_init_dept %}disabled{% endif %}>
+                            <option value="">全部发起科室</option>
+                            {% for d in departments %}
+                            <option value="{{ d.id_department }}"
+                                {% if (permissions.default_init_dept | string) == (d.id_department | string) %}selected{% endif %}>
+                                {{ d.department_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if permissions.lock_init_dept %}
+                        <input type="hidden" name="search_init_dept" value="{{ permissions.default_init_dept }}">
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- 3. 受理科室 -->
+                <div class="layui-inline">
+                    <label class="layui-form-label">受理科室</label>
+                    <div class="layui-input-inline">
+                        <select name="search_accept_dept" id="search_accept_dept" lay-filter="acceptDeptFilter" lay-search
+                                {% if permissions.lock_accept_dept %}disabled{% endif %}>
+                            <option value="">全部受理科室</option>
+                            {% for d in departments %}
+                                {% if d.work_flag == 1 %}
+                                <option value="{{ d.id_department }}"
+                                       {% if (permissions.default_accept_dept | string) == (d.id_department | string) %}selected{% endif %}>
+                                    {{ d.department_name }}
+                                </option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                        {% if permissions.lock_accept_dept %}
+                        <input type="hidden" name="search_accept_dept" value="{{ permissions.default_accept_dept }}">
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="layui-form-item" style="margin-left:30px">
+                <div class="layui-inline">
+                    <button type="submit" class="layui-btn layui-btn-normal" lay-submit lay-filter="data-search-btn">
+                        <i class="layui-icon layui-icon-search"></i> 搜索
+                    </button>
+                    <button type="reset" class="layui-btn layui-btn-primary" id="reset-btn">重置</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- 表格区域 -->
+    <div class="table-panel">
+        <table class="layui-hide" id="workorderTable" lay-filter="currentTableFilter"></table>
+    </div>
+</div>
+{% raw %}
+<!-- 行操作栏 -->
+<script type="text/html" id="currentTableBar">
+    <a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="view">查看</a>
+    {{# if(d.status !== 4 && d.status !== 6 && d.status !== 7){ }}
+    <a class="layui-btn layui-btn-xs" lay-event="more">处理</a>
+    {{# } else { }}
+    <a class="layui-btn layui-btn-xs layui-btn-disabled">更多</a>
+    {{# } }}
+</script>
+{% endraw %}
+
+{% endblock %}
+
+
+
+
+<script>
+layui.use(['form', 'table', 'layer', 'laydate', 'dropdown'], function () {
+    var $ = layui.jquery,
+        form = layui.form,
+        table = layui.table,
+        layer = layui.layer,
+        laydate = layui.laydate,
+        dropdown = layui.dropdown;
+
+    // --- 1. 注入后端权限数据 (新增 currentUser) ---
+    var permissions = {{ permissions | tojson }};
+    var currentLevel = {{ current_level }};
+    
+    // 【新增】获取当前用户详细身份，用于逻辑判断
+    var currentUser = {
+        level: Number("{{ user.current_level }}"),
+        work_flag: Number("{{ user.work_flag }}"), // 0:需求方, 1:受理方
+        dept_id: String("{{ user.id_department }}") // 转字符串方便比对
+    };
+
+    console.log("用户身份:", currentUser);
+
+    // --- AJAX 全局设置 (保持不变) ---
+    $.ajaxSetup({
+        beforeSend: function(xhr, settings) {
+            if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                var token = $('#csrf_token').val();
+                if (token) xhr.setRequestHeader("X-CSRFToken", token);
+            }
+        }
+    });
+
+    // 日期组件 (保持不变)
+    laydate.render({ elem: '#daterange', range: true, rangeLinked: true, done: function () { doSearch(); } });
+
+    // 状态映射 (保持不变)
+    const statusMap = {
+        0: { text: "待派单", color: "background-color:#1677ff !important;color:#fff;" },
+        1: { text: "已派单", color: "background-color:#13c2c2 !important;color:#fff;" },
+        2: { text: "已到达现场", color: "background-color:#52c41a !important;color:#fff;" },
+        3: { text: "已完成工单", color: "background-color:#389e0d !important;color:#fff;" },
+        4: { text: "已补全信息", color: "background-color:#722ed1 !important;color:#fff;" },
+        5: { text: "已完结", color: "background-color:#2f54eb !important;color:#fff;" },
+        11: { text: "已挂起", color: "background-color:#faad14 !important;color:#fff;" },
+        12: { text: "已转交委外处理", color: "background-color:#fa8c16 !important;color:#fff;" },
+        13: { text: "已驳回", color: "background-color:#ff4d4f !important;color:#fff;" },
+        22: { text: "委外已到达", color: "background-color:#95de64 !important;color:#000;" },
+        32: { text: "委外已完成", color: "background-color:#237804 !important;color:#fff;" },
+        33: { text: "需求科室已确认", color: "background-color:#bae7ff !important;color:#000;" },
+        34: { text: "管理科室已确认", color: "background-color:#69c0ff !important;color:#fff;" },
+        35: { text: "已完成核价", color: "background-color:#003a8c !important;color:#fff;" }
+    };
+
+    // --- 2. 【核心修改】菜单生成逻辑 ---
+    // 改名为 buildMenuByRow，接收整行数据 d
+    function buildMenuByRow(d) {
+        var status = String(d.status);
+        var menu = [];
+        
+        // 判断是否为该工单的发起科室
+        var isCreatorDept = (String(d.id_created_department) === currentUser.dept_id);
+        
+        // 判断是否为临床科室普通员工 (Level<50 且 work_flag=0)
+        var isClinical = (currentUser.level < 50 && currentUser.work_flag === 0);
+
+        // === 场景A: 临床科室/需求方 ===
+        if (isClinical) {
+            // 只能操作自己科室发起的单子
+            if (!isCreatorDept) return []; 
+
+            if (status === '4') {
+                // 状态4: 只有需求方可以评价
+                menu.push({ title: '科室评价', id: 'evaluate', icon: 'layui-icon-star-fill', style: 'color:#FFB800; font-weight:bold;' });
+            } else if (status === '13') {
+                // 状态13: 删除废单
+                menu.push({ title: '删除工单', id: 'delete', icon: 'layui-icon-delete', style: 'color:#ff5722;' });
+            }
+            return menu;
+        }
+
+        // === 场景B: 受理科室/管理员 ===
+        // 沿用您原有的流程逻辑
+        if (status === '0') {
+            menu.push(
+                { title: '分配工作人员', id: 'dispatch', icon: 'layui-icon-release' },
+                { title: '转单至其它部门', id: 'transfer', icon: 'layui-icon-refresh' },
+                { title: '委托院外单位处理', id: 'outsource', icon: 'layui-icon-user' },
+                { title: '挂起', id: 'pause', icon: 'layui-icon-pause' },
+                { type: '-' },
+                { title: '驳回', id: 'reject', icon: 'layui-icon-close', style: 'color:#ffb800;' }
+            );
+        } else if (status === '1') {
+            menu.push({ title: '挂起', id: 'pause', icon: 'layui-icon-pause' });
+            menu.push({ title: '转单至其它部门', id: 'transfer', icon: 'layui-icon-refresh' });
+        } else if (status === '2') {
+            menu.push({ title: '挂起', id: 'pause', icon: 'layui-icon-pause' });
+        } else if (status === '3') {
+            menu.push({ title: '工单信息录入', id: 'complete', icon: 'layui-icon-ok-circle', style: 'color:#16baaa; font-weight:500;' });
+        } else if (status === '11') {
+            menu.push(
+                { title: '分配工作人员', id: 'dispatch', icon: 'layui-icon-release' },
+                { title: '转单至其它部门', id: 'transfer', icon: 'layui-icon-refresh' },
+                { title: '委托院外单位处理', id: 'outsource', icon: 'layui-icon-user' },
+                { title: '挂起', id: 'pause', icon: 'layui-icon-pause' },
+                { type: '-' },
+                { title: '驳回', id: 'reject', icon: 'layui-icon-close', style: 'color:#ffb800;' }
+            );
+        } else if (status === '13') {
+            menu.push({ title: '删除工单', id: 'delete', icon: 'layui-icon-delete', style: 'color:#ff5722;' });
+        } else if (status === '4') {
+            // 受理科室只能评价自己发起的单子（自修自评），不能评价别人的单子
+            if (isCreatorDept) {
+                menu.push({ title: '科室评价', id: 'evaluate', icon: 'layui-icon-star-fill', style: 'color:#FFB800;' });
+            }
+        }
+        
+        return menu;
+    }
+
+    // --- 3. 表格渲染 (修改操作列) ---
+    table.render({
+        elem: '#workorderTable',
+        url: '/orders/api/list', 
+        defaultToolbar: ['filter', 'exports', 'print'],
+        cols: [[
+            {field: 'created_at', width: 170, title: '创建时间', sort: true},
+            {field: 'created_department_name', width: 120, title: '发起科室'}, 
+            {field: 'work_type', width: 100, title: '需求类型'},
+            {field: 'location', width: 150, title: '需求位置'},
+            {field: 'demand', minWidth: 200, title: '需求描述'}, 
+            {field: 'work_department_name', width: 120, title: '受理科室'}, 
+            {field: 'staff', width: 120, title: '当前处理人'}, 
+            {field: 'status', title: '状态', templet: function(d){
+                var s = statusMap[d.status] || { text: '未知', color: '' };
+                var style = s.color.indexOf(':') > -1 ? s.color : ""; 
+                var cls = s.color.indexOf(':') === -1 ? s.color : "";
+                return '<span class="layui-badge ' + cls + '" style="' + style + '">' + s.text + '</span>';
+            }},
+            // 【修改点】使用 templet 函数替代原有的 toolbar ID
+            {title: '操作', minWidth: 150, align: "center", fixed: 'right', templet: function(d){
+                var html = '<a class="layui-btn layui-btn-xs layui-btn-primary" lay-event="view">查看</a> ';
+                
+                // 根据当前行数据和用户权限，预计算菜单
+                var menuData = buildMenuByRow(d);
+                
+                // 如果有菜单项，显示“处理”按钮；否则显示禁用的“更多”或不显示
+                if (menuData.length > 0) {
+                    html += '<a class="layui-btn layui-btn-xs" lay-event="more">处理 <i class="layui-icon layui-icon-down"></i></a>';
+                } else {
+                    html += '<a class="layui-btn layui-btn-xs layui-btn-disabled">更多</a>';
+                }
+                return html;
+            }}
+        ]],
+        limits: [10, 15, 20, 25, 50],
+        limit: 15,
+        page: true,
+        skin: 'line',
+        where: {
+            search_hospital: $('[name="search_hospital"]').val(),
+            search_init_dept: $('[name="search_init_dept"]').val(),
+            search_accept_dept: $('[name="search_accept_dept"]').val()
+        }
+    });
+
+    // --- 监听事件 ---
+    form.on('submit(data-search-btn)', function (data) { doSearch(); return false; });
+    form.on('checkbox', function () { doSearch(); });
+    form.on('select(initDeptFilter)', function () { doSearch(); });
+    form.on('select(acceptDeptFilter)', function () { doSearch(); });
+
+    // 联动逻辑 (保持不变)
+    form.on('select(hospitalFilter)', function(data){
+        if (permissions.lock_hospital) return;
+        var hospitalId = data.value;
+        refreshDepts(hospitalId);
+        doSearch();
+    });
+
+    // --- 工具条事件 (更新逻辑) ---
+    table.on('tool(currentTableFilter)', function (obj) {
+        var data = obj.data;
+        if (obj.event === 'view') {
+            layer.open({
+                type: 2, title: '工单时间线', shadeClose: true, shade: 0.3, maxmin: true,
+                area: ['600px', '100%'], offset: 'r', anim: 2,
+                content: '/orders/flow/' + data.id
+            });
+        } else if (obj.event === 'more') {
+            // 【修改点】动态获取菜单数据
+            var menuData = buildMenuByRow(data);
+            
+            if (menuData.length === 0) {
+                layer.msg('当前状态无可用操作');
+                return;
+            }
+
+            dropdown.render({
+                elem: this, show: true, align: 'right',
+                id: 'dropdown-table-tool-' + data.id,
+                className: 'custom-dropdown-action',
+                style: 'box-shadow: 0 4px 16px rgba(0,0,0,.15); border-radius: 8px;',
+                data: menuData, // 使用新的 menuData
+                click: function(menu){ handleMoreAction(menu.id, data, obj); }
+            });
+        }
+    });
+   
+    // 动作处理器 (新增 delete 和 evaluate)
+    function handleMoreAction(action, data, obj){
+        var reloadTable = function() { table.reload('workorderTable'); };
+        
+        switch(action){
+            case 'dispatch': 
+                layer.open({ title: '派单', type: 2, shadeClose: true, area: ['800px', '600px'], content: '/orders/dispatch/modal/' + data.id, end: reloadTable });
+                break;
+            case 'transfer': 
+                layer.open({ title: '转单', type: 2, shadeClose: true, area: ['800px', '600px'], content: '/orders/transfer/' + data.id, end: reloadTable });
+                break;
+            case 'outsource': 
+                layer.open({ title: '委外处理', type: 2, shadeClose: true, area: ['800px', '600px'], content: '/orders/outsource/' + data.id, end: reloadTable });
+                break;
+            case 'complete': 
+                layer.open({ title: '工单：' + data.id + ' 信息补全', type: 2, shadeClose: true, area: ['90%', '90%'], content: '/orders/complete/' + data.id, end: reloadTable });
+                break;
+            case 'pause': 
+                layer.prompt({ formType: 2, title: '请输入挂起原因', area: ['300px', '160px'], btn: ['确定', '取消'] }, function(value, index){
+                    var loadIdx = layer.load(2);
+                    $.post('/orders/api/work_order/suspend', { work_id: data.id, reason: value }, function(res){
+                        layer.close(index);
+                        if(res.code === 0){
+                            layer.msg('工单已挂起', {icon: 1, time: 1000}, reloadTable);
+                        } else {
+                            layer.msg(res.msg || '操作失败', {icon: 2});
+                        }
+                    }).always(function(){ layer.close(loadIdx); });
+                });
+                break;
+            case 'reject': 
+                layer.prompt({ formType: 2, title: '请输入驳回理由', area: ['300px', '160px'], btn: ['确定', '取消'] }, function(value, index){
+                    var loadIdx = layer.load(2);
+                    $.post('/orders/api/work_order/reject', { work_id: data.id, reason: value }, function(res){
+                        layer.close(index);
+                        if(res.code === 0){
+                            layer.msg('工单已驳回', {icon: 1, time: 1000}, reloadTable);
+                        } else {
+                            layer.msg(res.msg || '操作失败', {icon: 2});
+                        }
+                    }).always(function(){ layer.close(loadIdx); });
+                });
+                break;
+            case 'delete': // 【新增】删除逻辑
+                layer.confirm('确定要删除该工单吗？此操作不可恢复。', {icon: 3, title:'删除确认'}, function(index){
+                    var loadIdx = layer.load(2);
+                    $.post('/orders/api/work_order/delete', { work_id: data.id }, function(res){
+                        layer.close(index);
+                        if(res.code === 0){
+                            layer.msg('删除成功', {icon: 1, time: 1000}, reloadTable);
+                        } else {
+                            layer.msg(res.msg || '删除失败', {icon: 2});
+                        }
+                    }).always(function(){ layer.close(loadIdx); });
+                });
+                break;
+            case 'evaluate': // 【新增】评价逻辑
+                layer.open({ 
+                    title: '满意度评价', type: 2, shadeClose: true, 
+                    area: ['50%', '80%'], 
+                    content: '/orders/evaluate/' + data.id, // 需确保此路由存在
+                    end: reloadTable 
+                });
+                break;
+            default: layer.msg('未知操作');
+        }
+    }
+
+    // 重置按钮逻辑 (保持不变)
+    $('#reset-btn').click(function(){
+        setTimeout(function(){
+            if(permissions.lock_hospital) {
+                $('select[name="search_hospital"]').val(permissions.default_hospital);
+                $('input[name="search_hospital"]').val(permissions.default_hospital);
+            }
+            if(permissions.lock_init_dept) {
+                $('select[name="search_init_dept"]').val(permissions.default_init_dept);
+                $('input[name="search_init_dept"]').val(permissions.default_init_dept);
+            }
+            if(permissions.lock_accept_dept) {
+                $('select[name="search_accept_dept"]').val(permissions.default_accept_dept);
+                $('input[name="search_accept_dept"]').val(permissions.default_accept_dept);
+            }
+            form.render('select');
+            doSearch();
+        }, 50);
+    });
+
+    // 辅助函数：刷新科室 (保持不变)
+    function refreshDepts(hospitalId) {
+        if(!hospitalId) {
+            if(!permissions.lock_init_dept) updateSelect('#search_init_dept', []);
+            if(!permissions.lock_accept_dept) updateSelect('#search_accept_dept', []);
+            return;
+        }
+        $.getJSON('/system/api/get_depts_by_hospital', { id_hospital: hospitalId }, function(res){
+            if(res.code === 0) {
+                if(!permissions.lock_init_dept) updateSelect('#search_init_dept', res.data, false);
+                if(!permissions.lock_accept_dept) updateSelect('#search_accept_dept', res.data, true);
+            } else {
+                layer.msg('获取科室列表失败');
+            }
+        });
+    }
+    function updateSelect(elemId, dataList, onlyWorker) {
+        var $select = $(elemId);
+        $select.empty();
+        $select.append('<option value="">' + (elemId.includes('accept') ? '全部受理科室' : '全部发起科室') + '</option>');
+        $.each(dataList, function(index, item){
+            if(onlyWorker && item.work_flag != 1) return;
+            $select.append('<option value="' + item.id_department + '">' + item.department_name + '</option>');
+        });
+        form.render('select');
+    }
+    function doSearch() {
+        var field = {};
+        field.daterange = $('#daterange').val();
+        var checkedStatus = [];
+        $("input:checkbox[name='status']:checked").each(function () { checkedStatus.push($(this).val()); });
+        field.status = checkedStatus.join(',');
+        var checkedWorkTypes = [];
+        $("input:checkbox[name='work_type']:checked").each(function () { checkedWorkTypes.push($(this).val()); });
+        field.work_type = checkedWorkTypes.join(',');
+        field.search_hospital = $('[name="search_hospital"]').val();
+        field.search_init_dept = $('[name="search_init_dept"]').val();
+        field.search_accept_dept = $('[name="search_accept_dept"]').val();
+        field.id = $('input[name="id"]').val();
+        table.reload('workorderTable', { page: { curr: 1 }, where: field }, 'data');
+    }
+});
+</script>

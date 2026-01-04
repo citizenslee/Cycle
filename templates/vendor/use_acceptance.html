@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>委外验收 - 需求科室</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>   
+     /* --- 品牌头部 --- */
+    .brand-header {
+      text-align: center;
+      padding: 20px 0 10px;
+    }
+    .brand-logo {
+      height: 40px;
+      object-fit: contain;
+    }
+
+        /* === 样式复用区 === */
+        body { background-color: #f4f7f9; padding: 15px; color: #333; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        .layui-tab-brief { margin-bottom: 20px; }
+        .layui-tab-title { background: #fff; border-radius: 8px; border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.03); height: 50px; line-height: 50px; }
+        .layui-tab-brief > .layui-tab-title .layui-this { color: #1E9FFF !important; font-weight: bold; }
+        .layui-tab-brief > .layui-tab-title .layui-this:after { border-bottom: 3px solid #1E9FFF; height: 35px; }
+        
+        .record-item { background: #fff; padding: 20px 25px; border-radius: 4px 8px 8px 4px; margin-bottom: 20px; position: relative; border: 1px solid #eef2f6; border-left: 6px solid #1E9FFF; box-shadow: 0 3px 10px rgba(0,0,0,0.04); transition: all 0.3s ease; }
+        .record-item:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(30, 159, 255, 0.15); }
+        
+        /* 状态颜色定义 */
+        .record-item[data-tab="todo"] { border-left-color: #ffb800; } /* 待验收：橙色 */
+        .record-item[data-tab="done"] { border-left-color: #52c41a; } /* 已完成：绿色 */
+        
+        .status-tag { position: absolute; right: 15px; top: 18px; padding: 4px 12px; color: #fff; font-size: 12px; border-radius: 4px; font-weight: 500; }
+        .st-todo { background-color: #fff7e6; color: #fa8c16; border: 1px solid #ffd591; }
+        .st-done { background-color: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+        
+        .record-item h3 { font-size: 17px; font-weight: 600; color: #2c3e50; padding-right: 80px; margin-bottom: 18px; display: flex; align-items: center; }
+        
+        .layui-collapse { border: none; }
+        .layui-colla-item { border: 1px solid #f2f3f5; margin-bottom: 10px; border-radius: 6px !important; overflow: hidden; }
+        .layui-colla-title { background-color: #fafafa !important; font-size: 14px; height: 40px; line-height: 40px; color: #555; padding-left: 15px !important; padding-right: 40px !important; position: relative; }
+        .layui-colla-title .layui-colla-icon { left: auto !important; right: 15px !important; top: 10px; color: #999; }
+        .layui-colla-content { padding: 15px !important; border-top: none; color: #666; }
+        
+        .row-kv { display: flex; padding: 8px 0; align-items: flex-start; }
+        .k { width: 90px; color: #999; font-size: 13px; flex-shrink: 0; }
+        .v { flex: 1; color: #333; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; } 
+        
+        .imgs img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; border: 1px solid #eee; margin-right: 5px; cursor: pointer; }
+        
+        .action-box { padding: 20px; background: #fff7e6; border-radius: 8px; text-align: center; border: 1px dashed #ffd591; }
+        .empty-state { text-align: center; padding: 60px 0; display: none; }
+        .empty-state i { font-size: 60px; color: #e0e0e0; margin-bottom: 15px; display: block; }
+        .empty-state p { color: #999; font-size: 14px; }
+        
+        .phone-link a { color: #1E9FFF; text-decoration: none; }
+    </style>
+</head>
+<body>
+  <!-- Logo -->
+  <div class="brand-header">
+    <img src="{{ url_for('static', filename='photo/fxjk-logo.png') }}" class="brand-logo" alt="Logo">
+  </div>
+<div class="layui-tab layui-tab-brief" lay-filter="tab">
+    <ul class="layui-tab-title" style="text-align:center;">
+        <li class="layui-this" lay-id="todo">待验收</li>
+        <li lay-id="done">已验收</li>
+    </ul>
+</div>
+
+<div id="listBody" style="max-width: 900px; margin: 0 auto;">
+    {% for record in records %}
+    <!-- 
+        逻辑说明：
+        1. 状态 32 (待验收) -> todo (显示在第一个Tab)
+        2. 状态 33, 34, 35 -> done (显示在历史记录Tab)
+    -->
+    <div class="card record-item" 
+         data-id="{{ record.id }}" 
+         data-status="{{ record.status }}"
+         data-tab="{{ 'todo' if record.status == 32 else 'done' }}">
+         
+        <span class="status-tag {{ 'st-todo' if record.status == 32 else 'st-done' }}">
+            {% if record.status == 12 %} 待到达现场
+            {% elif record.status == 22 %} 处理中
+            {% elif record.status == 32 %} 待本部门验收
+            {% elif record.status == 33 %} 待【{{ record.outsourcing_unit_by_dept_name }}】核验
+            {% elif record.status == 34 %} 待核价
+            {% elif record.status == 35 %} 已核价
+            {% else %} 状态:{{ record.status }}
+            {% endif %}
+        </span>
+        
+        <h3>委外工单号 #{{ record.id }}</h3>
+
+        <div class="layui-collapse" lay-accordion>
+             <!-- 1.基础信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">1. 基础信息</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">关联工单</span><span class="v">{{ record.work_record_id }}</span></div>
+                    <div class="row-kv"><span class="k">发起时间</span><span class="v">{{ record.assigned_at }}</span></div>           
+                    <div class="row-kv"><span class="k">需求科室</span><span class="v">{{ record.use_department_name }}</span></div>
+                    <div class="row-kv"><span class="k">地点</span><span class="v">{{ record.location }}</span></div>
+                    <div class="row-kv"><span class="k">需求内容</span><span class="v">{{ record.demand }}</span></div>
+                    <div class="row-kv">
+                        <span class="k">联系电话</span>
+                        <span class="v phone-link"> <a href="tel:{{ record.contact_phone }}"><i class="layui-icon layui-icon-phone"></i> {{ record.contact_phone }}</a></span>
+                    </div>
+                    <div class="row-kv"><span class="k">备注</span><span class="v">{{ record.remark }}</span></div>
+                    <div class="row-kv"><span class="k">委外单位</span><span class="v">{{ record.unit_name }}</span></div>
+                </div>
+            </div>
+
+            <!-- 2. 供应商实施信息 (只要有报价就显示，兼容后续所有状态) -->
+            {% if record.quoted_amount %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">2. 供应商实施信息</h2>
+                <div class="layui-colla-content layui-show">
+                    <div class="row-kv"><span class="k">响应时间</span><span class="v">{{ record.vendor_arrive_at }}</span></div>
+                    <div class="row-kv"><span class="k">完成时间</span><span class="v">{{ record.vendor_finished_at }}</span></div>
+                    <div class="row-kv"><span class="k">工程量概述</span><span class="v" style="white-space: pre-wrap;">{{ record.work_content }}</span></div>
+                    <div class="row-kv"><span class="k">完工图片</span><div class="v imgs" id="vp_{{record.id}}">
+                        {% for p in record.vendor_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('vp_{{record.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">申报报价</span><span class="v" style="color:#ff5722; font-weight:bold; font-size:large;">¥ {{ record.quoted_amount }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 3.需求科室意见信息 (已验收、核验、核价状态下显示) -->
+            {% if record.evaluation_comment %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">3. 需求科室【{{ record.use_department_name }}】验收意见</h2>
+                <div class="layui-colla-content layui-show">
+                    <div class="row-kv"><span class="k">验收结论</span><span class="v" style="color:#52c41a">{{ record.evaluation_comment }}</span></div>
+                    <div class="row-kv"><span class="k">验收人</span><span class="v">{{ record.use_department_username }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- 4.管理科室意见信息 (状态 >= 34 显示) -->
+            {% if record.manager_evaluation %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">4. 管理科室【{{ record.outsourcing_unit_by_dept_name }}】核验意见</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">核验结论</span><span class="v">{{ record.manager_evaluation }}</span></div>
+                    <div class="row-kv"><span class="k">核验图片</span><div class="v imgs" id="mp_{{record.id}}">
+                        {% for p in record.mgr_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('mp_{{record.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">核验人</span><span class="v">{{ record.manager_department_username }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 5.核价信息 (状态 35 显示) -->
+            <!-- 修正：这里兼容 check_amount_user 和 cherck_amount_user 两种拼写 -->
+            {% if record.final_amount or record.check_amount_user or record.cherck_amount_user %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title" style="color:#722ed1; font-weight: 600;">5. 核价信息</h2>
+                <div class="layui-colla-content layui-show">
+                        <div class="row-kv"><span class="k">核定金额</span><span class="v" style="color:#52c41a; font-weight: bold;font-size:large;">¥ {{ record.final_amount }}</span></div>
+                        <div class="row-kv"><span class="k">核价说明</span><span class="v">{{ record.final_amount_reason }}</span></div>
+                        <div class="row-kv"><span class="k">核价人</span><span class="v">{{ record.cherck_amount_user or record.check_amount_user }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 操作区：仅在进行中(状态32)状态显示 -->
+            {% if record.status == 32 %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title" style="color:#ffb800; font-weight:bold;">验收操作</h2>
+                <div class="layui-colla-content layui-show">
+                    <div class="action-box">
+                        <textarea id="comment_{{record.id}}" class="layui-textarea" placeholder="请输入验收意见 (例如: 合格，通过验收)" style="margin-bottom:15px;"></textarea>
+                        <div class="layui-btn-group" style="display:flex; gap: 10px;">
+                            <button class="layui-btn layui-btn-danger" style="flex:1; border-radius: 4px;" onclick="doVerify({{record.id}}, 'reject')">
+                                <i class="layui-icon layui-icon-close"></i> 驳回整改
+                            </button>
+                            <button class="layui-btn" style="flex:1; background-color:#ffb800; border-radius: 4px;" onclick="doVerify({{record.id}}, 'pass')">
+                                <i class="layui-icon layui-icon-ok"></i> 通过验收
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+    {% endfor %}
+    <div id="emptyState" class="empty-state"><i class="layui-icon layui-icon-face-smile"></i><p>暂无待验收工单</p></div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['element', 'layer', 'jquery'], function(){
+    var $ = layui.jquery, layer = layui.layer, element = layui.element;
+    
+    // ==========================================
+    // 通用 Tab 切换逻辑 (所有页面通用)
+    // ==========================================
+    function checkEmpty(tabName) {
+        var visibleCount = 0;
+        $('.record-item').each(function(){
+            // 直接读取 HTML 中预计算好的 data-tab 属性
+            var itemTab = $(this).attr('data-tab'); 
+            
+            if(itemTab === tabName) {
+                $(this).show();
+                visibleCount++;
+            } else {
+                $(this).hide();
+            }
+        });
+
+        // 控制空状态图片的显示/隐藏
+        if(visibleCount === 0) {
+            $('#emptyState').show();
+        } else {
+            $('#emptyState').hide();
+        }
+    }
+
+    // 1. 初始化：默认显示待办 (todo)
+    checkEmpty('todo');
+
+    // 2. 监听 Tab 点击切换
+    // 注意：Tab 的 lay-id 必须设置为 'todo' 和 'done'
+    element.on('tab(tab)', function(data){
+        var selectedTab = $(this).attr('lay-id'); // 获取点击的 lay-id
+        checkEmpty(selectedTab);
+    });
+
+    // 3. 图片预览
+    window.viewImgs = function(id){ layer.photos({ photos: '#'+id, anim: 5, shade: 0.6 }); };
+
+    // 4. 验收 API
+    window.doVerify = function(id, action) {
+        var comment = $('#comment_'+id).val().trim();
+        if(!comment && action === 'reject') return layer.msg('驳回必须填写原因', {icon: 5, anim: 6});
+        if(!comment) comment = '验收通过';
+
+        layer.confirm(action==='pass'?'确认通过验收？':'确认驳回？', {icon:3, title:'操作确认'}, function(idx){
+            layer.close(idx);
+            var loadIdx = layer.load(2);
+            $.post('/v/dept/api/confirm', {id: id, action: action, comment: comment}, function(res){
+                layer.close(loadIdx);
+                if(res.code===0) { 
+                    layer.msg('操作成功', {icon:1, time: 1000}, function(){ location.reload(); }); 
+                }
+                else { 
+                    layer.msg(res.msg, {icon:2}); 
+                }
+            }).fail(function(){
+                layer.close(loadIdx);
+                layer.msg('网络请求失败', {icon:2});
+            });
+        });
+    };
+});
+</script>
+</body>
+</html>

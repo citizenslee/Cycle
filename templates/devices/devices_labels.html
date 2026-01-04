@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>设备二维码标签管理</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script> 
+    <style>
+        body { padding: 15px; background: #f2f2f2; }
+        .layui-table tbody tr { transition: background-color 0.2s; }
+        .layui-table tbody tr:hover { background-color: #e6f7ff !important; }
+        .text-success { color: #009688; font-weight: bold; }
+        .text-secondary { color: #ccc; }
+        #qrModalContent { text-align: center; padding: 20px; display: none; }
+        #qrcode-container { display: flex; justify-content: center; margin: 15px auto; }
+        #qrcode-container img { border: 1px solid #eee; padding: 5px; }
+        .qr-info { font-size: 16px; color: #333; margin-bottom: 5px; font-weight: bold; }
+        .qr-sub { font-size: 13px; color: #666; margin-bottom: 10px; }
+        .qr-link-text { font-size: 12px; color: #999; word-break: break-all; margin-top: 10px; }
+        @media print {
+            body * { visibility: hidden; }
+            #qrModalContent, #qrModalContent * { visibility: visible; }
+            #qrModalContent { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="layui-card">
+    <div class="layui-card-header">
+        设备标签与巡检入口
+        <span class="layui-badge layui-bg-blue" style="margin-left:10px;">总数: {{ pagination.count }}</span>
+        <span class="layui-badge layui-bg-gray" style="margin-left:5px;">当前第 {{ pagination.curr }} 页</span>
+    </div>
+    <div class="layui-card-body">
+        
+        <!-- === 筛选表单 === -->
+        <form class="layui-form" id="searchForm" method="GET" style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; align-items: center;">
+            
+            <input type="hidden" name="page" id="pageInput" value="{{ pagination.curr }}">
+            
+            <!-- 1. 医院选择 -->
+            <div style="width: 180px;">
+                <select name="hospital_id" lay-filter="hospital_select" {% if permissions.lock_hospital %}disabled{% endif %}>
+                    <option value="">所有医院</option>
+                    {% for h in hospitals %}
+                    <option value="{{ h.id_hospital }}" {% if selected_hospital_id|string == h.id_hospital|string %}selected{% endif %}>{{ h.hospital_name }}</option>
+                    {% endfor %}
+                </select>
+                <!-- 锁定时的隐藏域 -->
+                {% if permissions.lock_hospital %}
+                <input type="hidden" name="hospital_id" value="{{ selected_hospital_id }}">
+                {% endif %}
+            </div>
+
+            <!-- 2. 科室选择 -->
+            <div style="width: 180px;">
+                <select name="department_id" id="department_select" lay-filter="auto_submit" {% if permissions.lock_dept %}disabled{% endif %}>
+                    <option value="">所有科室</option>
+                    {% for d in departments %}
+                    <option value="{{ d.id_department }}" {% if selected_department_id|string == d.id_department|string %}selected{% endif %}>{{ d.department_name }}</option>
+                    {% endfor %}
+                </select>
+                <!-- 锁定时的隐藏域 -->
+                {% if permissions.lock_dept %}
+                <input type="hidden" name="department_id" value="{{ selected_department_id }}">
+                {% endif %}
+            </div>
+
+            <!-- 关键词 -->
+            <div style="width: 180px;">
+                <input type="text" name="keyword" value="{{ request.args.get('keyword', '') }}" placeholder="搜索名称或型号" class="layui-input">
+            </div>
+
+            <!-- 开关 -->
+            <div style="margin-left: 10px;" title="开启后只显示有关联事件/维保计划的设备">
+                <input type="hidden" name="only_has_plan" id="val_only_has_plan" value="{{ pagination.only_has_plan }}">
+                <input type="checkbox" lay-skin="switch" lay-text="仅显示有计划|显示全部" lay-filter="switch_plan_ui"
+                       {% if pagination.only_has_plan == '1' %}checked{% endif %}>
+            </div>
+            
+            <button class="layui-btn layui-btn-normal" lay-submit lay-filter="searchBtn">查询</button>
+            <a href="/devices/labels" class="layui-btn layui-btn-primary">重置</a>
+        </form>
+        
+        <!-- === 数据表格 === -->
+        <table class="layui-table">
+            <thead>
+                <tr>
+                    <th width="60">ID</th>
+                    <th>设备名称</th>
+                    <th>型号</th>
+                    <th>所属医院 / 科室</th> 
+                    <th>安装位置</th>
+                    <th style="text-align:center; width: 100px;">状态</th>
+                    <th style="text-align:center; width: 120px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if devices %}
+                    {% for device in devices %}
+                    <tr>
+                        <td>{{ device.id }}</td>
+                        <td><b style="color:#333">{{ device.name }}</b></td>
+                        <td>{{ device.model or '-' }}</td>
+                        <td>
+                            <div style="font-size:12px; color:#666;">{{ device.hospital_name }}</div>
+                            <div style="font-size:12px; color:#1E9FFF;">{{ device.department_name }}</div>
+                        </td>
+                        <td>{{ device.install_location or '-' }}</td>
+                        <td style="text-align:center;">
+                            <span class="{{ device.plan_status_class }}">
+                                {% if device.has_plan %}
+                                    <i class="layui-icon layui-icon-ok-circle"></i> {{ device.plan_status_text }}
+                                {% else %}
+                                    {{ device.plan_status_text }}
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td style="text-align:center;">
+                            <button class="layui-btn layui-btn-primary layui-btn-sm" 
+                                    style="border-color: #FFB800; color: #333;"
+                                    onclick="generateQr('{{ device.qr_link }}', '{{ device.name }}', '{{ device.model or '' }}', '{{ device.id }}')">
+                                <i class="layui-icon layui-icon-fonts-code" style="color: #FFB800;"></i> 二维码
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align:center; padding: 40px; color:#999;">
+                            <i class="layui-icon layui-icon-face-surprised" style="font-size: 40px;"></i>
+                            <p style="margin-top:10px;">当前筛选条件下没有设备数据</p>
+                            {% if pagination.only_has_plan == '1' %}
+                                <p style="font-size:12px;">(尝试关闭“仅显示有计划”开关查看更多)</p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <!-- === 分页容器 === -->
+        <div id="pageContainer" style="text-align: right;"></div>
+    </div>
+</div>
+
+<!-- === 二维码弹窗 === -->
+<div id="qrModalContent">
+    <div class="qr-info" id="qr-device-name"></div>
+    <div class="qr-sub" id="qr-device-model"></div>
+    <div id="qrcode-container"></div>
+    <div class="qr-link-text">
+        <span class="layui-badge layui-bg-gray">设备ID: <span id="qr-device-id"></span></span><br>
+        <div style="margin-top:5px; font-family: monospace;" id="qr-url-display"></div>
+    </div>
+    <div style="margin-top: 25px;" class="no-print">
+        <button class="layui-btn layui-btn-normal" onclick="window.print()">
+            <i class="layui-icon layui-icon-print"></i> 打印标签
+        </button>
+        <a id="qr-download-link" class="layui-btn layui-btn-primary" download="qrcode.png">
+            <i class="layui-icon layui-icon-download-circle"></i> 下载图片
+        </a>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    layui.use(['form', 'layer', 'jquery', 'laypage'], function(){
+        var form = layui.form;
+        var layer = layui.layer;
+        var $ = layui.jquery;
+        var laypage = layui.laypage;
+
+        // 当前权限状态 (从后端传来的 permissions 变量)
+        var isHospLocked = {{ permissions.lock_hospital|tojson }};
+
+        var pg = {
+            curr: {{ pagination.curr }},
+            limit: {{ pagination.limit }},
+            count: {{ pagination.count }}
+        };
+
+        if (pg.count > 0) {
+            laypage.render({
+                elem: 'pageContainer',
+                count: pg.count, limit: pg.limit, curr: pg.curr,
+                layout: ['count', 'prev', 'page', 'next', 'skip'],
+                jump: function(obj, first){
+                    if(!first){
+                        $('#pageInput').val(obj.curr);
+                        $('#searchForm').submit();
+                    }
+                }
+            });
+        }
+
+        // 医院-科室联动 (只有未锁定医院时才需要)
+        form.on('select(hospital_select)', function(data){
+            if(isHospLocked) return; // 锁定状态无需联动
+
+            $('#pageInput').val(1); // 切换医院，页码重置
+            
+            // 提交整个表单以刷新页面数据 (最简单的联动方式)
+            $('#searchForm').submit();
+        });
+
+        // 科室选择变更
+        form.on('select(auto_submit)', function(data){
+            $('#pageInput').val(1); 
+            $('#searchForm').submit();
+        });
+        
+        // 开关
+        form.on('switch(switch_plan_ui)', function(data){
+            $('#val_only_has_plan').val(data.elem.checked ? '1' : '0');
+            $('#pageInput').val(1);
+            $('#searchForm').submit();
+        });
+        
+        // 提交
+        form.on('submit(searchBtn)', function(data){
+            $('#pageInput').val(1); 
+            return true;
+        });
+
+        // 二维码
+        window.generateQr = function(url, name, model, id) {
+            $('#qr-device-name').text(name);
+            $('#qr-device-model').text(model ? "规格/型号: " + model : "");
+            $('#qr-device-id').text(id);
+            $('#qr-url-display').text(url);
+            $('#qrcode-container').html('');
+
+            new QRCode(document.getElementById("qrcode-container"), {
+                text: url, width: 160, height: 160,
+                colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+
+            setTimeout(function(){
+                var canvas = $('#qrcode-container canvas')[0];
+                var img = $('#qrcode-container img')[0];
+                var dataUrl = canvas ? canvas.toDataURL("image/png") : (img ? img.src : "");
+                var downloadBtn = document.getElementById('qr-download-link');
+                downloadBtn.href = dataUrl;
+                downloadBtn.download = "设备_" + id + "_" + name + ".png";
+            }, 100);
+
+            layer.open({
+                type: 1, title: false, shadeClose: true, closeBtn: 1,
+                area: ['360px', '450px'], content: $('#qrModalContent')
+            });
+        };
+    });
+</script>
+</body>
+</html>

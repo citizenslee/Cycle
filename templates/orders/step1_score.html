@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>步骤1：分值核定与人员关联</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <!-- 引入 SortableJS -->
+  <script src="{{ url_for('static', filename='Sortable.min.js') }}"></script>
+    <style>
+        /* === 基础布局：适配 100% 高度 === */
+        body { 
+            padding: 20px; 
+            background: #f0f2f5; 
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            height: calc(100vh - 40px);
+            overflow: hidden; 
+        }
+        
+        .main-wrapper {
+            display: flex;
+            gap: 20px;
+            height: 100%;
+        }
+
+        /* === 面板与卡片设计 === */
+        .left-panel {
+            flex: 1.6;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .right-panel {
+            flex: 1;
+            background: #fff;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #e6ebf1;
+        }
+
+        .glass-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #e6ebf1;
+            position: relative;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: #16baaa;
+            border-radius: 2px;
+        }
+
+        /* === AI 建议提醒 === */
+        .ai-alert {
+            background: linear-gradient(90deg, #effffc 0%, #ffffff 100%);
+            border-left: 4px solid #16baaa;
+            padding: 12px 15px;
+            border-radius: 6px;
+            color: #0d9488;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        /* === 评分表单网格布局 === */
+        .score-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .score-item {
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #edf2f7;
+            transition: all 0.3s;
+        }
+        .score-item:hover { border-color: #cbd5e1; }
+        .score-item .label { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+        .score-item .ai-val-tag { font-size: 11px; color: #16baaa; font-weight: bold; background: #e6fffb; padding: 2px 6px; border-radius: 4px; }
+        
+        .score-item input, .score-item select {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            height: 38px;
+            width: 100%;
+            padding: 0 10px;
+            box-sizing: border-box;
+            font-weight: 600;
+            color: #1e293b;
+            font-size: 14px;
+        }
+
+        /* === 总分 Banner === */
+        .total-banner {
+            background: #1e293b;
+            color: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-top: 10px;
+            flex-shrink: 0;
+            box-shadow: 0 10px 20px rgba(30, 41, 59, 0.2);
+        }
+        .total-banner .val { font-size: 42px; font-weight: 800; color: #38bdf8; line-height: 1; }
+        .total-banner .unit { font-size: 14px; opacity: 0.6; margin-top: 5px; }
+
+        /* === 拖拽区域设计 === */
+        .drag-box {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            padding: 18px;
+            gap: 15px;
+            overflow: hidden;
+        }
+        .drag-col {
+            flex: 1;
+            background: #f8fafc;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            border: 1px dashed #cbd5e1;
+            overflow: hidden;
+        }
+        .col-header {
+            padding: 10px 15px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            background: #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+        }
+        .staff-list {
+            flex: 1;
+            padding: 12px;
+            overflow-y: auto;
+            min-height: 50px;
+        }
+
+        /* 人员卡片 */
+        .staff-card {
+            background: #fff;
+            padding: 10px 14px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: grab;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .staff-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.08);
+            border-color: #16baaa;
+        }
+        .staff-card.recommended {
+            border-left: 4px solid #16baaa;
+            background: #f0fdfa;
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            background: #1e9fff;
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .staff-name { font-size: 14px; font-weight: 600; color: #334155; }
+
+        /* 底部操作区（日志按钮） */
+        .bottom-actions {
+            margin-top: auto;
+            padding-top: 10px;
+        }
+
+        /* 隐藏原生 Layui 样式干扰 */
+        .layui-form-select .layui-edge { display: none; }
+        
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="main-wrapper">
+    <!-- 左侧：核算表单 -->
+    <div class="left-panel">
+        <div class="glass-card">
+            <div class="section-title">AI 智能核算引擎</div>
+            <div id="ai-loading" style="text-align: center; padding: 10px;">
+                <i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop" style="color:#16baaa; font-size: 24px;"></i>
+                <span style="color: #999; font-size: 13px; margin-left: 10px;">AI 正在分析工单逻辑...</span>
+            </div>
+            <div id="ai-reason" class="ai-alert"></div>
+
+            <form class="layui-form" lay-filter="scoreForm">
+                <div class="score-grid">
+                    <div class="score-item" style="grid-column: span 2;">
+                        <div class="label">工单任务类型 (AI 建议: <span id="ai-task-name" class="ai-val-tag">--</span>)</div>
+                        <select name="task_type_id" id="task_type_id" lay-filter="taskFilter" lay-search>
+                            <option value="">搜索或选择类型...</option>
+                            {% for t in task_types %}
+                            <option value="{{ t.id }}" data-score="{{ t.score }}">{{ t.task_name }} ({{ t.score }}分)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="score-item">
+                        <div class="label">基础分 (AI: <span id="ai-base-score">0</span>)</div>
+                        <input type="number" name="base_score" id="base_score" readonly style="background:#f1f5f9; cursor:not-allowed">
+                    </div>
+                    <div class="score-item">
+                        <div class="label">难度系数 (AI: <span id="ai-coeff">1.0</span>)</div>
+                        <input type="number" name="coefficient" id="coefficient" step="0.1" class="calc-trigger">
+                    </div>
+                    <div class="score-item">
+                        <div class="label">响应得分 (AI: <span id="ai-arrive">0</span>)</div>
+                        <input type="number" name="arrive_score" id="arrive_score" class="calc-trigger">
+                    </div>
+                    <div class="score-item">
+                        <div class="label">效率得分 (AI: <span id="ai-repair">0</span>)</div>
+                        <input type="number" name="repair_score" id="repair_score" class="calc-trigger">
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="total-banner">
+            <div style="opacity: 0.7; font-size: 13px; margin-bottom: 5px;">工单核定最终总分</div>
+            <div><span class="val" id="total-score-display">0.0</span></div>
+            <div class="unit">Total Performance Points</div>
+        </div>
+
+        <!-- 底部快捷操作 -->
+        <div class="bottom-actions">
+            <button type="button" class="layui-btn layui-btn-primary layui-btn-fluid" id="btnViewFlow" style="border-radius: 8px; height: 45px; border: 1px solid #cbd5e1;">
+                <i class="layui-icon layui-icon-list"></i> 查看原始流转时间线
+            </button>
+        </div>
+    </div>
+
+    <!-- 右侧：拖拽分派 -->
+    <div class="right-panel">
+        <div class="drag-box">
+            <div class="section-title" style="margin-bottom:0">人员关联分派</div>
+            
+            <div class="drag-col">
+                <div class="col-header">
+                    <span><i class="layui-icon layui-icon-group"></i> 可关联人员表</span>
+                    <span id="pool-count">0</span>
+                </div>
+                <div id="staffPool" class="staff-list">
+                    {% for staff in all_technicians %}
+                    <div class="staff-card" data-name="{{ staff.value }}">
+                        <div class="avatar">{{ staff.title[0] }}</div>
+                        <div class="staff-name">{{ staff.title }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="drag-col" style="border: 2px solid #16baaa; background: #f0fdfa;">
+                <div class="col-header" style="background:#16baaa; color:#fff">
+                    <span><i class="layui-icon layui-icon-ok-circle"></i> 本次关联人员</span>
+                    <span id="active-count">0</span>
+                </div>
+                <div id="staffActive" class="staff-list">
+                    <!-- 动态拖入或 AI 自动移入 -->
+                </div>
+            </div>
+            <div style="font-size: 12px; color: #94a3b8; text-align: center;">
+                <i class="layui-icon layui-icon-tips" style="font-size: 20px;"></i> 拖拽人员卡片进行手动调整
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['form', 'layer', 'jquery'], function(){
+    var form = layui.form, layer = layui.layer, $ = layui.jquery;
+
+    // --- 1. 初始化拖拽逻辑 ---
+    var poolEl = document.getElementById('staffPool');
+    var activeEl = document.getElementById('staffActive');
+
+    new Sortable(poolEl, {
+        group: 'technicians',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onEnd: updateData
+    });
+
+    new Sortable(activeEl, {
+        group: 'technicians',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onAdd: function(evt){ $(evt.item).addClass('recommended'); updateData(); },
+        onRemove: function(evt){ $(evt.item).removeClass('recommended'); updateData(); },
+        onEnd: updateData
+    });
+
+    function updateData() {
+        $('#pool-count').text($('#staffPool .staff-card').length);
+        $('#active-count').text($('#staffActive .staff-card').length);
+        syncToParent();
+    }
+    updateData();
+
+    // --- 2. 自动执行 AI 分析 ---
+    $('#ai-loading').show();
+    $.ajax({
+        url: '/orders/api/settle/analyze',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ work_id: parent.WORK_ORDER_DATA.work_id }),
+        success: function(res){
+            $('#ai-loading').hide();
+            if(res.code === 0){
+                var ai = res.data.suggested;
+                // 显示分析原因
+                $('#ai-reason').html('<i class="layui-icon layui-icon-tips"></i> ' + res.data.ai_reason).fadeIn();
+                
+                // 设置建议标签
+                $('#ai-task-name').text(ai.task_name);
+                $('#ai-base-score').text(ai.base_score);
+                
+                // 填充表单
+                form.val('scoreForm', {
+                    task_type_id: ai.task_type_id,
+                    base_score: ai.base_score,
+                    coefficient: ai.coefficient,
+                    arrive_score: ai.arrive_score,
+                    repair_score: ai.repair_score
+                });
+
+                // 【自动移动建议人员】
+                var recommendedStaff = res.data.staff_list; // 后端提取的人员数组
+                $('#staffPool .staff-card').each(function(){
+                    var name = $(this).data('name');
+                    if(recommendedStaff.indexOf(name) !== -1){
+                        $(this).addClass('recommended').appendTo('#staffActive');
+                    }
+                });
+
+                parent.WORK_ORDER_DATA.ai_suggested = ai;
+                updateData();
+                calculateTotal();
+                form.render('select');
+            }
+        }
+    });
+
+    // --- 3. 计算与同步 ---
+    function calculateTotal() {
+        var d = form.val('scoreForm');
+        var base = parseFloat(d.base_score) || 0;
+        var coeff = parseFloat(d.coefficient) || 1.0;
+        var arrive = parseFloat(d.arrive_score) || 0;
+        var repair = parseFloat(d.repair_score) || 0;
+        var total = (base * coeff) + arrive + repair;
+        $('#total-score-display').text(total.toFixed(1));
+        syncToParent();
+    }
+
+    function syncToParent() {
+        var d = form.val('scoreForm');
+        var staffNames = [];
+        $('#staffActive .staff-card').each(function(){
+            staffNames.push($(this).data('name'));
+        });
+        
+        // 实时写入主壳全局对象
+        parent.WORK_ORDER_DATA.scores = {
+            task_type_id: d.task_type_id,
+            base_score: d.base_score,
+            coefficient: d.coefficient,
+            arrive_score: d.arrive_score,
+            repair_score: d.repair_score,
+            total_score: $('#total-score-display').text()
+        };
+        parent.WORK_ORDER_DATA.staff_str = staffNames.join(',');
+    }
+
+    // --- 4. 监听与操作 ---
+    $(document).on('input', '.calc-trigger', calculateTotal);
+
+    form.on('select(taskFilter)', function(data){
+        var score = $(data.elem).find("option:selected").data('score') || 0;
+        form.val('scoreForm', { 'base_score': score });
+        calculateTotal();
+    });
+
+    // 查看时间线弹出层
+    $('#btnViewFlow').click(function(){
+        layer.open({
+            type: 2, 
+            title: '工单：' + parent.WORK_ORDER_DATA.work_id + ' 流转时间线', 
+            shadeClose: true, 
+            shade: 0.3, 
+            maxmin: true,
+            area: ['600px', '100%'], 
+            offset: 'r', 
+            anim: 2,
+            content: '/orders/flow/' + parent.WORK_ORDER_DATA.work_id
+        });
+    });
+
+    // 暴露给主页面的校验函数
+    window.validateStep = function() {
+        var d = parent.WORK_ORDER_DATA.scores;
+        if(!d.task_type_id) {
+            layer.msg('请核定任务类型', {icon: 5, shift: 6});
+            return false;
+        }
+        if(!parent.WORK_ORDER_DATA.staff_str) {
+            layer.msg('请拖拽关联参与人员', {icon: 5, shift: 6});
+            return false;
+        }
+        return true;
+    };
+});
+</script>
+</body>
+</html>

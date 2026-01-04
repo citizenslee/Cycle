@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>设备巡检 - {{ device.name }}</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <link rel="icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+    <style>
+        :root { --primary-color: #16baaa; --danger-color: #ff4d4f; --page-bg: #f4f7f9; }
+        body { background-color: var(--page-bg); padding: 0 12px 100px 12px; font-family: sans-serif; }
+
+        /* 遮罩层 */
+        #identity-mask {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #fff; z-index: 9999; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+        }
+
+        .brand-header { text-align: center; padding: 25px 0 15px; }
+        .brand-logo { height: 32px; filter: grayscale(0.2); }
+
+        .card { background: #fff; border-radius: 16px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); overflow: hidden; }
+        .card-header { padding: 15px; border-bottom: 1px solid #f0f0f0; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+        .card-body { padding: 15px; }
+
+        /* 状态标签 */
+        .status-badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid #b7eb8f; color: #52c41a; background: #f6ffed; }
+        .status-badge.error { color: var(--danger-color); background: #fff2f0; border-color: #ffccc7; }
+
+        /* 权限锁定区域样式 */
+        .lock-area { text-align: center; padding: 40px 20px; color: #999; }
+        .lock-icon-box { 
+            width: 60px; height: 60px; background: #f5f5f5; border-radius: 50%; 
+            margin: 0 auto 15px; display: flex; align-items: center; justify-content: center; 
+        }
+        .lock-btn { margin-top: 20px; width: 160px; border-radius: 20px; }
+
+        /* 工单与日志 */
+        .order-item { border: 1px solid #f0f0f0; border-radius: 12px; margin-bottom: 10px; padding: 12px; border-left: 4px solid #faad14; }
+        .btn-action { background: var(--primary-color); color: #fff; border: none; padding: 6px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; }
+        
+        /* 底部导航 */
+        .footer-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 12px rgba(0,0,0,0.05); z-index: 1000; box-sizing: border-box; }
+        .btn-report { width: 100%; height: 46px; border-radius: 23px; background: #fff2f0; color: var(--danger-color); border: 1px solid #ffccc7; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+        .log-box { background: #f8f9fa; border-radius: 8px; padding: 10px; margin-top: 5px; font-size: 13px; }
+        .layui-timeline-axis { color: var(--primary-color); }
+    </style>
+</head>
+<body>
+
+<!-- 1. 身份识别加载层 -->
+<div id="identity-mask">
+    <i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop" style="font-size: 30px; color: var(--primary-color);"></i>
+    <p style="margin-top: 15px; color: #999; font-size: 14px;">正在核验权限...</p>
+</div>
+
+<div class="brand-header">
+    <img src="/static/photo/fxjk-logo.png" class="brand-logo" alt="Logo">
+</div>
+
+<!-- 2. 设备基础信息 (所有人可见) -->
+<div class="card">
+    <div class="card-header">
+        <span><i class="layui-icon layui-icon-engine"></i> {{ device.name }}</span>
+        <span class="status-badge {{ 'error' if device.status != 1 else '' }}">
+            {{ '运行正常' if device.status == 1 else '状态异常' }}
+        </span>
+    </div>
+<div class="card-body">
+    <div style="font-size: 13px; color: #666; line-height: 2;">
+        <p>
+            <i class="layui-icon layui-icon-location" style="margin-right: 8px;"></i>
+            安装位置：{{ device.install_location or '未设置' }}
+        </p>
+        <p>
+            <i class="layui-icon layui-icon-about" style="margin-right: 8px;"></i>
+            相关型号：{{ device.model or '-' }}
+        </p>
+        <p>
+            <i class="layui-icon layui-icon-home" style="margin-right: 8px;"></i>
+            管理科室：{{ device.department_name or '未设置' }}
+        </p>
+        <p>
+            <i class="layui-icon layui-icon-user" style="margin-right: 8px;"></i>
+            使用科室：{{ device.use_department_name or '未设置' }}
+        </p>
+    </div>
+</div>
+
+</div>
+
+<!-- 3. 敏感数据区域 (权限控制) -->
+{% if access_status == 'allowed' %}
+    
+    <!-- 待办工单 -->
+    <div style="margin: 20px 0 10px 5px; font-weight: 700; font-size: 15px; color: var(--danger-color);">
+        <i class="layui-icon layui-icon-notice"></i> 待签到工单 ({{ orders|length }})
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            {% if orders %}
+                {% for order in orders %}
+                <div class="order-item" onclick="viewOrder('{{ order.id }}')">
+                    <div class="order-title" style="font-weight:600; margin-bottom:5px;">{{ order.demand }}</div>
+                    <div style="font-size:12px; color:#999; display:flex; gap:10px;">
+                        <span>ID: {{ order.id }}</span>
+                        <span>{{ order.created_at[:16] }}</span>
+                    </div>
+                    <div style="text-align: right; margin-top: 10px;">
+                        <button class="btn-action" onclick="event.stopPropagation(); doCheckIn('{{ order.id }}')">立即签到</button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="text-align: center; padding: 20px; color: #ccc;">
+                    <i class="layui-icon layui-icon-face-smile" style="font-size: 30px;"></i>
+                    <p style="margin-top: 10px;">暂无待签到事项</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 历史日志 -->
+    <div class="card">
+        <div class="card-header">
+            最近日志
+            <span onclick="viewAllLogs()" style="color: var(--primary-color); font-weight: 400; font-size: 13px; cursor: pointer;">查看全部 ></span>
+        </div>
+        <div class="card-body">
+            {% if logs %}
+            <ul class="layui-timeline">
+                {% for log in logs %}
+                <li class="layui-timeline-item">
+                    <i class="layui-icon layui-timeline-axis layui-icon-circle-dot"></i>
+                    <div class="layui-timeline-content layui-text">
+                        <div style="font-size: 13px; font-weight: 700;">{{ log.occur_time[:16] }}</div>
+                        <div class="log-box">
+                            {{ log.work_content }}
+                            <div style="text-align: right; margin-top: 5px; color: #999; font-size: 11px;">经办人：{{ log.staff }}</div>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div style="text-align: center; padding: 15px; color: #ddd;">无历史记录</div>
+            {% endif %}
+        </div>
+    </div>
+
+{% else %}
+
+    <!-- 无权限/未登录 提示区域 -->
+    <div class="card">
+        <div class="card-body lock-area">
+            <div class="lock-icon-box">
+                <i class="layui-icon {{ 'layui-icon-password' if access_status == 'denied' else 'layui-icon-user' }}" 
+                   style="font-size: 24px; color: #bbb;"></i>
+            </div>
+            
+            {% if access_status == 'denied' %}
+                <h3 style="color:#333; font-weight:600;">权限不足</h3>
+                <p style="margin-top:8px; font-size:13px;">{{ unauthorized_msg }}</p>
+                <button class="layui-btn layui-btn-primary lock-btn" onclick="openLoginLayer()">
+                    切换账号登录
+                </button>
+            {% else %}
+                <h3 style="color:#333; font-weight:600;">身份未识别</h3>
+                <p style="margin-top:8px; font-size:13px;">登录后可查看工单、维保记录并进行签到操作。</p>
+                <button class="layui-btn layui-btn-normal lock-btn" style="background:var(--primary-color);" onclick="openLoginLayer()">
+                    立即登录
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+{% endif %}
+
+<!-- 4. 底部故障上报 (所有人可见) -->
+<div class="footer-bar">
+    <button class="btn-report" onclick="goReport()">
+        <i class="layui-icon layui-icon-release"></i> 发现设备异常？点击上报
+    </button>
+</div>
+
+<!-- 登录弹窗模板 -->
+<div id="login-tpl" style="display:none; padding: 25px 20px;">
+    <p style="font-size:13px; color:#666; margin-bottom:15px; text-align:center;">
+        您正在访问 <b style="color:#333;">{{ device.hospital_name }}</b> 的设备
+    </p>
+    <form class="layui-form">
+        <div class="layui-form-item">
+            <input type="text" name="username" placeholder="请输入工号/账号" class="layui-input" lay-verify="required" style="height:44px;">
+        </div>
+        <div class="layui-form-item">
+            <input type="password" name="password" placeholder="请输入密码" class="layui-input" lay-verify="required" style="height:44px;">
+        </div>
+        <button class="layui-btn layui-btn-fluid" lay-submit lay-filter="doLogin" style="background-color: var(--primary-color); height:44px; border-radius:4px; font-size:15px;">
+            登录 / 切换
+        </button>
+    </form>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['layer', 'jquery', 'form'], function(){
+    var layer = layui.layer, $ = layui.jquery, form = layui.form;
+    
+    // 设备ID
+    const deviceId = "{{ device.id }}";
+    // 后端传来的状态
+    const accessStatus = "{{ access_status }}"; 
+
+    // 生成设备指纹
+    function getDeviceId() {
+        let bid = localStorage.getItem('app_device_id');
+        if (!bid) {
+            bid = 'DEV-' + Math.random().toString(36).substr(2, 9).toUpperCase() + '-' + Date.now();
+            localStorage.setItem('app_device_id', bid);
+        }
+        return bid;
+    }
+
+    // 初始化：如果后端认为是游客(guest)，前端尝试自动登录
+    $(function(){
+        if (accessStatus === 'guest') {
+            tryAutoLogin();
+        } else {
+            // 如果是 denied 或 allowed，直接移除遮罩
+            // 如果是 denied，页面上已经渲染了提示卡片
+            $('#identity-mask').fadeOut(300);
+        }
+    });
+
+    // 尝试设备指纹自动登录
+    function tryAutoLogin() {
+        const bid = getDeviceId();
+        $.ajax({
+            url: "/login/check_device",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ device_id: bid }),
+            success: function(res) {
+                if (res.code === 0 && res.accounts && res.accounts.length > 0) {
+                    // 有绑定账号，尝试自动登录第一个
+                    fastLogin(bid, res.accounts[0].id);
+                } else {
+                    // 无绑定账号，移除遮罩，显示游客界面
+                    $('#identity-mask').fadeOut(300);
+                }
+            },
+            error: function() { $('#identity-mask').fadeOut(300); }
+        });
+    }
+
+    function fastLogin(bid, uid) {
+        $.ajax({
+            url: "/login/fast_login",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ device_id: bid, user_id: uid }),
+            success: function(res) {
+                if (res.code === 0) {
+                    // 登录成功，刷新页面，后端会重新判断权限
+                    location.reload();
+                } else {
+                    $('#identity-mask').fadeOut(300);
+                }
+            },
+            error: function() { $('#identity-mask').fadeOut(300); }
+        });
+    }
+
+    // 打开登录弹窗
+    window.openLoginLayer = function() {
+        layer.open({
+            type: 1,
+            title: '身份验证',
+            area: ['320px', 'auto'],
+            content: $('#login-tpl'),
+            shadeClose: true,
+            success: function(layero, index) {
+                form.on('submit(doLogin)', function(data) {
+                    let field = data.field;
+                    field.device_id = getDeviceId();
+                    
+                    var loadIdx = layer.load(2);
+                    $.ajax({
+                        url: "/login/api_login_and_bind",
+                        type: "POST",
+                        contentType: "application/json",
+                        data: JSON.stringify(field),
+                        success: function(res) {
+                            layer.close(loadIdx);
+                            if(res.code === 0) {
+                                layer.msg('登录成功', {icon: 1, time: 1000}, function(){
+                                    location.reload(); // 刷新以获取新权限视图
+                                });
+                            } else {
+                                layer.msg(res.msg || '认证失败', {icon: 2});
+                            }
+                        },
+                        error: function(){
+                            layer.close(loadIdx);
+                            layer.msg('网络请求失败');
+                        }
+                    });
+                    return false;
+                });
+            }
+        });
+    };
+
+    // 业务功能：故障上报
+    window.goReport = function() { 
+        // 使用 Layer 弹出 Iframe，而不是页面跳转
+        layer.open({
+            type: 2,
+            title: '快速故障上报',
+            shadeClose: true,
+            shade: 0.3,
+            area: ['100%', '70%'], // 移动端友好，底部弹出或占大半屏
+            offset: 'b',           // 从底部弹出
+            anim: 2,               // 动画效果
+            content: "/devices/report_fault_page?device_id=" + deviceId,
+            skin: 'layui-layer-mobile-radius' // 加上圆角样式(如果在mobile版layui中)
+        });
+    };
+
+    
+    const ORDERS = {{ orders | tojson }};
+        window.doCheckIn = function(orderId) {
+            // 1. 从前端 orders 中找到对应工单
+            const order = ORDERS.find(o => String(o.id) === String(orderId));
+
+            // 兜底，防止异常
+            const workText = order
+                ? (order.work_type|| order.demand || '该工单')
+                : '该工单';
+
+            layer.confirm(
+                `确定已到达现场并完成了${workText}任务？`,
+                { title:false, btnAlign:'c' },
+                function(idx){
+                    const loadIdx = layer.load(2);
+                    $.ajax({
+                        url: '/devices/api/orders_check_in',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ order_id: orderId }),
+                        success: function(res) {
+                            layer.close(loadIdx);
+                            if(res.code === 0) {
+                                layer.msg('签到成功', {icon: 1}, function(){
+                                    location.reload();
+                                });
+                            } else {
+                                layer.msg(res.msg, {icon: 2});
+                            }
+                        }
+                    });
+                }
+            );
+        };
+
+
+    window.viewOrder = function(id) {
+        layer.open({ type: 2, title: '工单详情', area: ['100%', '100%'], content: '/orders/flow/' + id });
+    };
+    
+    window.viewAllLogs = function() {
+        layer.open({ type: 2, title: '设备日志', area: ['100%', '100%'], content: "/devices/log_list?device_id=" + deviceId });
+    };
+});
+</script>
+</body>
+</html>

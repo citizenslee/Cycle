@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>委外核价审定</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>   
+     /* --- 品牌头部 --- */
+    .brand-header {
+      text-align: center;
+      padding: 20px 0 10px;
+    }
+    .brand-logo {
+      height: 40px;
+      object-fit: contain;
+    }
+
+        /* === 全局与布局 === */
+        body { background-color: #f4f7f9; padding: 15px; color: #333; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        
+        /* === Tab 样式 === */
+        .layui-tab-brief { margin-bottom: 20px; }
+        .layui-tab-title { 
+            background: #fff; 
+            border-radius: 8px; 
+            border: none !important; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03); 
+            height: 50px;
+            line-height: 50px;
+        }
+        .layui-tab-brief > .layui-tab-title .layui-this {
+            color: #1E9FFF !important;
+            font-weight: bold;
+        }
+        .layui-tab-brief > .layui-tab-title .layui-this:after {
+            border-bottom: 3px solid #1E9FFF;
+            height: 35px;
+        }
+
+        /* === 核心：卡片立体样式 === */
+        .record-item { 
+            background: #fff; 
+            padding: 20px 25px; 
+            border-radius: 4px 8px 8px 4px;
+            margin-bottom: 20px; 
+            position: relative; 
+            border: 1px solid #eef2f6;
+            border-left: 6px solid #1E9FFF; /* 蓝色线条 */
+            box-shadow: 0 3px 10px rgba(0,0,0,0.04);
+            transition: all 0.3s ease;
+        }
+        .record-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(30, 159, 255, 0.15);
+        }
+
+        /* 不同状态的边框色 */
+        .record-item[data-status="34"] { border-left-color: #722ed1; } 
+        .record-item[data-status="3"] { border-left-color: #52c41a; } 
+        
+        /* === 状态标签 === */
+        .status-tag { 
+            position: absolute; 
+            right: 15px; 
+            top: 18px; 
+            padding: 4px 12px; 
+            color: #fff; 
+            font-size: 12px; 
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .st-34 { background-color: #f9f0ff; color: #722ed1; border: 1px solid #d3adf7; }
+        .st-3  { background-color: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+
+        /* === 卡片标题 === */
+        .record-item h3 { 
+            font-size: 17px; 
+            font-weight: 600;
+            color: #2c3e50; 
+            padding-right: 80px; 
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+        }
+        .unit-name {
+            font-weight: normal; 
+            font-size: 13px; 
+            color: #999; 
+            margin-left: 8px;
+            background: #f0f2f5;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        /* === 折叠面板美化 (修改箭头至右侧) === */
+        .layui-collapse { border: none; }
+        .layui-colla-item { 
+            border: 1px solid #f2f3f5; 
+            margin-bottom: 10px; 
+            border-radius: 6px !important; 
+            overflow: hidden; 
+        }
+        
+        /* 1. 标题栏样式调整 */
+        .layui-colla-title { 
+            background-color: #fafafa !important; 
+            font-size: 14px; 
+            height: 40px; 
+            line-height: 40px; 
+            color: #555;
+            /* 关键点：左侧不留箭头位，右侧留出空间 */
+            padding-left: 15px !important; 
+            padding-right: 40px !important; 
+            position: relative;
+        }
+        
+        /* 2. 箭头图标定位调整 */
+        .layui-colla-title .layui-colla-icon {
+            left: auto !important;  /* 取消左侧定位 */
+            right: 15px !important; /* 设置为右侧定位 */
+            top: 10;
+            color: #999;
+        }
+
+        .layui-colla-content { 
+            padding: 15px !important; 
+            border-top: none; 
+            color: #666;
+        }
+
+        /* === KV 数据行 === */
+        .row-kv { 
+            display: flex; 
+            padding: 8px 0; 
+            align-items: flex-start;
+        }
+        .k { 
+            width: 100px; 
+            color: #999; 
+            font-size: 13px; 
+            flex-shrink: 0; 
+        }
+        .v { 
+            flex: 1; 
+            color: #333; 
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        /* === 图片 === */
+        .imgs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; }
+        .imgs img { 
+            width: 60px; 
+            height: 60px; 
+            border-radius: 4px; 
+            object-fit: cover; 
+            border: 1px solid #eee;
+            cursor: zoom-in;
+            transition: opacity 0.2s;
+        }
+        .imgs img:hover { opacity: 0.8; }
+
+        /* === 核价操作区 === */
+        .price-action-box {
+            padding: 25px;
+            background: linear-gradient(135deg, #f9f0ff 0%, #fff 100%);
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #ebdcfc;
+        }
+        .final-price-text { 
+            color: #722ed1; 
+            font-size: 24px; 
+            font-weight: 700; 
+            margin: 10px 0 15px 0;
+            font-family: Consolas, Monaco, monospace;
+        }
+        
+        /* === 空状态样式 === */
+        .empty-state {
+            text-align: center;
+            padding: 60px 0;
+            display: none; 
+        }
+        .empty-state i {
+            font-size: 60px;
+            color: #e0e0e0;
+            margin-bottom: 15px;
+            display: block;
+        }
+        .empty-state p {
+            color: #999;
+            font-size: 14px;
+        }
+
+    </style>
+</head>
+<body>
+  <!-- Logo -->
+  <div class="brand-header">
+    <img src="{{ url_for('static', filename='photo/fxjk-logo.png') }}" class="brand-logo" alt="Logo">
+  </div>
+<!-- Tab 导航 -->
+<div class="layui-tab layui-tab-brief" lay-filter="tab">
+    <ul class="layui-tab-title" style="text-align:center;">
+        <li class="layui-this" lay-id="todo">待核价</li>
+        <li lay-id="done">历史记录</li>
+    </ul>
+</div>
+
+<div id="listBody" style="max-width: 900px; margin: 0 auto;">
+    {% for record in records %}
+    <!-- 统一标准 -->
+    <div class="card record-item" 
+         data-id="{{ record.id }}" 
+         data-status="{{ record.status }}"
+         data-tab="{{ 'todo' if record.status == 34 else 'done' }}">
+         <!-- 卡片内容... -->
+        <span class="status-tag {{ 'st-todo' if record.status == 33 else 'st-done' }}">
+            {% if record.status == 12 %} 待到达现场
+            {% elif record.status == 22 %} 处理中
+            {% elif record.status == 32 %} 待【{{ record.use_department_name }}】验收
+            {% elif record.status == 33 %} 待【{{ record.outsourcing_unit_by_dept_name }}】核验
+            {% elif record.status == 34 %} 待核价
+            {% elif record.status == 35 %} 已核价
+            {% else %} 状态:{{ record.status }}
+            {% endif %}
+        </span>
+        
+        <h3>
+            委外工单编号: {{ record.id }}
+            <span class="unit-name">{{ record.unit_name }}</span>
+        </h3>
+
+        <div class="layui-collapse">
+            
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">1. 基础信息</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">关联工单</span><span class="v">{{ record.work_order_id }}</span></div>
+                    <div class="row-kv"><span class="k">发起时间</span><span class="v">{{ record.assigned_at }}</span></div>           
+                    <div class="row-kv"><span class="k">需求科室</span><span class="v">{{ record.use_department_name }}</span></div>
+                    <div class="row-kv"><span class="k">地点</span><span class="v">{{ record.location }}</span></div>
+                    <div class="row-kv"><span class="k">需求内容</span><span class="v">{{ record.demand }}</span></div>
+                    <div class="row-kv"><span class="k">联系电话</span><span class="v">{{ record.contact_phone }}</span></div>
+                    <div class="row-kv"><span class="k">备注</span><span class="v">{{ record.remark }}</span></div>
+                    <div class="row-kv"><span class="k">委外单位</span><span class="v">{{ record.unit_name }}</span></div>
+                </div>
+            </div>
+
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">2. 供应商实施信息</h2>
+                <div class="layui-colla-content layui-show">
+                    <div class="row-kv"><span class="k">响应时间</span><span class="v">{{ record.vendor_arrive_at }}</span></div>
+                    <div class="row-kv"><span class="k">完成时间</span><span class="v">{{ record.vendor_finished_at }}</span></div>
+                    <div class="row-kv"><span class="k">工程量概述</span><span class="v" style="white-space: pre-wrap;">{{ record.work_content }}</span></div>
+                    <div class="row-kv"><span class="k">完工图片</span><div class="v imgs" id="vp_{{record.id}}">
+                        {% for p in record.vendor_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('vp_{{record.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">申报报价</span><span class="v" style="color:#ff5722; font-weight:bold; font-size:large;">¥ {{ record.quoted_amount }}</span></div>
+                </div>
+            </div>
+
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">3. 需求科室【{{ record.use_department_name }}】验收意见</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">验收结论</span><span class="v">{{ record.evaluation_comment }}</span></div>
+                    <div class="row-kv"><span class="k">验收人</span><span class="v">{{ record.use_department_username }}</span></div>
+                </div>
+            </div>
+
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">4. 管理科室【{{ record.outsourcing_unit_by_dept_name }}】验收意见</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">验收结论</span><span class="v">{{ record.manager_evaluation }}</span></div>
+                    <div class="row-kv"><span class="k">验收图片</span><div class="v imgs" id="mp_{{record.id}}">
+                        {% for p in record.mgr_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('mp_{{record.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">验收人</span><span class="v">{{ record.manager_department_username }}</span></div>
+                </div>
+            </div>
+
+            <div class="layui-colla-item">
+                <!-- 给第5项加个特殊样式 -->
+                <h2 class="layui-colla-title" style="color:#722ed1; font-weight: 600;">5. 核价信息</h2>
+                <div class="layui-colla-content layui-show">
+                    {% if record.status == 34 %}
+                        <div class="price-action-box">
+                            <p style="color: #999; font-size:12px;">供应商申报金额</p>
+                            <p class="final-price-text">¥ {{ record.quoted_amount }}</p>
+                            <button class="layui-btn layui-bg-purple" style="width: 100%; border-radius: 4px; height: 38px; line-height: 38px;" 
+                                onclick="openPriceModal({{ record.id }}, {{ record.quoted_amount }})">
+                                <i class="layui-icon layui-icon-edit"></i> 审定核价
+                            </button>
+                        </div>
+                    {% else %}
+                        <div class="row-kv"><span class="k">核定金额</span><span class="v" style="color:#52c41a; font-weight: bold;font-size:large;">¥ {{ record.final_amount }}</span></div>
+                        <div class="row-kv"><span class="k">核价说明</span><span class="v">{{ record.final_amount_reason }}</span></div>
+                        <div class="row-kv"><span class="k">核价人</span><span class="v">{{ record.cherck_amount_user }}</span></div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- 空状态提示 -->
+    <div id="emptyState" class="empty-state">
+        <i class="layui-icon layui-icon-face-smile" style="color:#d2d2d2;"></i>
+        <p id="emptyMsg">当前暂无需要核价的工单</p>
+    </div>
+
+</div>
+
+<!-- 弹窗 -->
+<div id="priceModal" style="display: none; padding: 25px;">
+    <div class="layui-form layui-form-pane">
+        <div class="layui-form-item">
+            <label class="layui-form-label">审定金额</label>
+            <div class="layui-input-block">
+                <input type="number" id="modal_final_amount" class="layui-input" placeholder="请输入最终金额" style="font-weight:bold; color:#722ed1;">
+            </div>
+        </div>
+        <div class="layui-form-item layui-form-text">
+            <label class="layui-form-label">核价理由/备注</label>
+            <div class="layui-input-block">
+                <textarea id="modal_reason" class="layui-textarea" placeholder="如果金额有调整，请填写原因"></textarea>
+            </div>
+        </div>
+        <div style="text-align: right; margin-top: 20px;">
+             <button class="layui-btn layui-btn-primary" onclick="layer.closeAll()">取消</button>
+             <button class="layui-btn layui-bg-purple" onclick="submitPrice()">确认提交</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['element', 'layer', 'jquery'], function(){
+    var $ = layui.jquery, layer = layui.layer, element = layui.element;
+
+    // ==========================================
+    // 通用 Tab 切换逻辑 (所有页面通用)
+    // ==========================================
+    function checkEmpty(tabName) {
+        var visibleCount = 0;
+        $('.record-item').each(function(){
+            // 直接读取 HTML 中预计算好的 data-tab 属性
+            var itemTab = $(this).attr('data-tab'); 
+            
+            if(itemTab === tabName) {
+                $(this).show();
+                visibleCount++;
+            } else {
+                $(this).hide();
+            }
+        });
+
+        // 控制空状态图片的显示/隐藏
+        if(visibleCount === 0) {
+            $('#emptyState').show();
+        } else {
+            $('#emptyState').hide();
+        }
+    }
+
+    // 1. 初始化：默认显示待办 (todo)
+    checkEmpty('todo');
+
+    // 2. 监听 Tab 点击切换
+    // 注意：Tab 的 lay-id 必须设置为 'todo' 和 'done'
+    element.on('tab(tab)', function(data){
+        var selectedTab = $(this).attr('lay-id'); // 获取点击的 lay-id
+        checkEmpty(selectedTab);
+    });
+
+
+    window.viewImgs = function(id){ 
+        layer.photos({ photos: '#'+id, anim: 5, shade: 0.6 }); 
+    };
+
+    window.openPriceModal = function(id, quote) {
+        window.curId = id;
+        $('#modal_final_amount').val(quote);
+        layer.open({ 
+            type: 1, 
+            title: false,
+            closeBtn: 0,
+            shadeClose: true,
+            content: $('#priceModal'), 
+            area: ['90%', 'auto'],
+            maxWidth: 450,
+            success: function(layero, index){
+                $('#modal_final_amount').focus();
+            }
+        });
+    };
+
+window.submitPrice = function() {
+        // 1. 获取输入值并去除首尾空格
+        var final_amount = $('#modal_final_amount').val();
+        var reason = $('#modal_reason').val();
+        
+        // 2. 验证金额 (非空且不仅仅是空格)
+        if(!final_amount || final_amount.trim() === '') {
+            $('#modal_final_amount').focus(); // 自动聚焦到金额输入框
+            return layer.msg('请输入审定金额', {icon: 5, anim: 6});
+        }
+
+        // 3. 验证核价理由 (新增：非空验证)
+        if(!reason || reason.trim() === '') {
+            $('#modal_reason').focus(); // 自动聚焦到理由输入框
+            return layer.msg('请输入核价理由/备注', {icon: 5, anim: 6});
+        }
+
+        // 4. 提交数据
+        var loadIdx = layer.load(2);
+        $.post('/v/manager/api/submit_price', {
+            id: window.curId,
+            final_amount: final_amount.trim(),
+            final_amount_reason: reason.trim()
+        }, function(res){
+            layer.close(loadIdx);
+            if(res.code === 0) {
+                layer.msg('审定成功', {icon: 1, time: 1000}, function(){ 
+                    location.reload(); 
+                });
+            } else {
+                layer.msg(res.msg || '操作失败', {icon: 2});
+            }
+        }).fail(function(){
+            layer.close(loadIdx);
+            layer.msg('网络请求失败', {icon: 2});
+        });
+    };
+
+
+});
+</script>
+</body>
+</html>

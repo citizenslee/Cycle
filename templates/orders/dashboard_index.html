@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>工单管理首页</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="/static/layui/css/layui.css" media="all">
+  
+  <style>
+    body { background-color: #f2f2f2; padding: 10px 20px; }
+    
+    /* === 卡片通用样式 === */
+    .dashboard-card {
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-radius: 8px; /* 圆角稍微大一点 */
+        text-align: center;
+        border: 1px solid #e6e6e6;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        border-color: #fff;
+    }
+    .dashboard-card .layui-card-header {
+        font-weight: 600;
+        font-size: 15px;
+        border-bottom: 1px solid #f6f6f6;
+        background-color: #fff;
+        border-radius: 8px 8px 0 0;
+    }
+    .dashboard-card .layui-card-body {
+        padding: 25px 10px;
+        color: #888;
+        font-size: 13px;
+    }
+    .dashboard-card .layui-card-body p {
+        margin-top: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    /* 图标样式 */
+    .card-icon {
+        font-size: 42px;
+        display: block;
+        margin-bottom: 12px;
+        transition: transform 0.3s;
+    }
+    .dashboard-card:hover .card-icon {
+        transform: scale(1.1);
+    }
+    
+    /* 分类标题样式 */
+    .section-title {
+        margin: 25px 0 15px 5px;
+        font-size: 18px;
+        font-weight: 500;
+        color: #333;
+        border-left: 5px solid #009688;
+        padding-left: 12px;
+        line-height: 1.2;
+    }
+
+    /* 颜色定义 */
+    .c-blue   { color: #1E9FFF; }
+    .c-green  { color: #009688; }
+    .c-orange { color: #FFB800; }
+    .c-red    { color: #FF5722; }
+    .c-cyan   { color: #2F4056; } 
+    .c-purple { color: #5FB878; }
+    .c-black  { color: #393D49; } /* 补充缺失的黑色定义 */
+    .c-gray   { color: #666666; }
+  </style>
+</head>
+<body>
+
+<div class="layui-fluid">
+
+  <!-- ======================= 模块 1: 工单管理 ======================= -->
+  <div class="section-title">工单管理</div>
+  <div class="layui-row layui-col-space20">
+    
+    <!-- 1101 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1101">
+        <div class="layui-card-header">工单列表</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-list card-icon c-blue"></i>
+          <p>查看与管理所有工单记录</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1102 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1102">
+        <div class="layui-card-header">修改工单信息</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-edit card-icon c-cyan"></i>
+          <p>编辑现有工单的详细数据</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1104: 顺序调整，对应侧边栏 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1104">
+        <div class="layui-card-header">发起工单</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-release card-icon c-orange"></i>
+          <p>快速创建并发布新工单</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 1105: 从底部移上来，填补空缺 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1105">
+        <div class="layui-card-header">任务类型管理</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-template-1 card-icon c-gray"></i>
+          <p>管理系统支持的任务分类</p>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+
+  <!-- ======================= 模块 2: 委外业务管理 ======================= -->
+  <!-- 备注：完全适配侧边栏 1501-1504 的新结构 -->
+  <div class="section-title">委外业务管理</div>
+  <div class="layui-row layui-col-space20">
+    
+    <!-- 1501 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1501">
+        <div class="layui-card-header">委外供应商管理</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-user card-icon c-green"></i>
+          <p>维护委外单位与联系人信息</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1502 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1502">
+        <div class="layui-card-header">需求科室验收</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-survey card-icon c-blue"></i>
+          <p>使用部门对服务进行验收确认</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1503: 标题已更新为 管理科室验收 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1503">
+        <div class="layui-card-header">管理科室验收</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-vercode card-icon c-cyan"></i>
+          <p>归口管理部门进行二次审核</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1504: 标题已更新为 委外费用结算 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1504">
+        <div class="layui-card-header">委外费用结算</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-rmb card-icon c-red"></i>
+          <p>核对账单并进行财务结算</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ======================= 模块 3: 排班与任务 ======================= -->
+  <div class="section-title">排班与任务</div>
+  <div class="layui-row layui-col-space20">
+    
+    <!-- 1201 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1201">
+        <div class="layui-card-header">排班表</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-table card-icon c-blue"></i>
+          <p>全局排班计划与日历视图</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1202 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1202">
+        <div class="layui-card-header">班次定义</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-time card-icon c-red"></i>
+          <p>设置上下班时间与轮班规则</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1203 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1203">
+        <div class="layui-card-header">人员排班</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-group card-icon c-purple"></i>
+          <p>分配人员具体执勤班次</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1204 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1204">
+        <div class="layui-card-header">自动派单规则</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-engine card-icon c-black"></i>
+          <p>配置智能分派工单的逻辑</p>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+
+  <!-- ======================= 模块 4: 物资管理 ======================= -->
+  <div class="section-title">物资管理</div>
+  <div class="layui-row layui-col-space20">
+    
+    <!-- 1301 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1301">
+        <div class="layui-card-header">物资请购</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-cart-simple card-icon c-blue"></i>
+          <p>填写请购单申请所需物资</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1302 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1302">
+        <div class="layui-card-header">物资审批&入库</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-auz card-icon c-orange"></i>
+          <p>审核申请及入库管理</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1303 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="1303">
+        <div class="layui-card-header">库存查询</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-chart-screen card-icon c-green"></i>
+          <p>查看目前仓库库存情况</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+<!-- 引入 layui.js -->
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['jquery', 'layer'], function(){
+  var $ = layui.jquery;
+  var layer = layui.layer;
+
+  // 监听卡片点击
+  $('.dashboard-card').on('click', function(){
+    var id = $(this).attr('data-id');
+    var title = $(this).find('.layui-card-header').text();
+    
+    // 逻辑：尝试调用父级框架打开标签页
+    if(window.parent && window.parent.layui){
+        var $parent = window.parent.layui.jquery;
+        
+        // 在父窗口左侧菜单中查找对应的 data-id
+        var $menuItem = $parent('.site-menu-active[data-id="'+ id +'"]');
+        
+        // 尝试两种选择器，适配不同的Admin模板结构
+        if($menuItem.length === 0) {
+            $menuItem = $parent('a[lay-href*="'+id+'"], a[data-id="'+id+'"]');
+        }
+
+        if($menuItem.length > 0){
+            // 触发点击，让父框架处理路由
+            $menuItem.click();
+        } else {
+            // 如果找不到菜单，也可以选择直接在当前iframe跳转（备选方案）
+            // location.href = '/page/' + id; 
+            
+            console.warn('未在左侧菜单找到 ID:', id);
+            layer.msg('页面跳转请求已发送: ' + title + ' (ID:'+id+')', {icon: 1, time: 1000});
+        }
+    } else {
+        layer.msg('当前为独立预览模式，ID: ' + id);
+    }
+  });
+
+});
+</script>
+
+</body>
+</html>

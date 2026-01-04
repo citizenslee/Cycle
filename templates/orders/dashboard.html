@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block title %}工单中心-Cycle智慧工作流平台 {% endblock %}
+
+{% block styles %}
+<style>
+  /* 工作台整体容器：填满剩余高度 */
+  .workbench-container {
+    display: flex;
+    height: calc(100vh - 80px); /* 减去顶部导航高度 */
+    background-color: #f2f2f2;
+    overflow: hidden;
+  }
+
+  /* 左侧侧边栏 */
+  .wb-sidebar {
+    width: 220px;
+    background-color: #28333e; /* 深色侧边栏 */
+    box-shadow: 2px 0 6px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0; /* 防止被挤压 */
+    transition: width 0.3s;
+  }
+
+  /* 侧边栏菜单样式微调 */
+  .wb-sidebar .layui-nav-tree {
+    width: 100%;
+  }
+  .wb-sidebar .layui-nav-item a {
+    font-size: 14px;
+  }
+  .wb-sidebar .layui-nav-tree .layui-nav-bar {
+    background-color: #1e9fff !important;
+  }
+
+  /* 右侧内容区 */
+  .wb-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Layui Tab 样式定制 */
+  .layui-tab-card {
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Tab 标题栏 */
+  .layui-tab-title {
+    background-color: #f9f9f9;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .layui-tab-title .layui-this {
+    background-color: #fff !important;
+    color: #1e9fff;
+    font-weight: bold;
+  }
+  
+  .layui-tab-title li .layui-tab-close {
+    color: #999;
+  }
+  .layui-tab-title li .layui-tab-close:hover {
+    background-color: #ff5722;
+    color: #fff;
+  }
+
+  /* Tab 内容区 - 核心：iframe容器 */
+  .layui-tab-content {
+    flex: 1;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  
+  .layui-tab-item {
+    height: 100%;
+    width: 100%;
+  }
+
+  /* Iframe 铺满 */
+  .wb-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="workbench-container">
+  
+  <!-- 左侧菜单栏 -->
+  <div class="wb-sidebar">
+    <ul class="layui-nav layui-nav-tree" lay-filter="side-menu">
+      
+      <!-- 菜单项 0: 首页 -->
+      <li class="layui-nav-item layui-nav-itemed">
+        <!-- 注意：data-id="1" 对应首页卡片里的逻辑 -->
+        <a href="javascript:;" class="site-menu-active" data-id="1" data-title="系统工作台首页" data-url="/orders/dashboard_index">
+          <i class="layui-icon layui-icon-home"></i> &nbsp;首页
+        </a>
+      </li>
+
+      <!-- 菜单项 1: 工单管理 (11xx) -->
+      <li class="layui-nav-item">
+        <a href="javascript:;"><i class="layui-icon layui-icon-form"></i> &nbsp;工单管理</a>
+        <dl class="layui-nav-child">
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1101" data-title="工单列表" data-url="/orders/list">
+              <i class="layui-icon layui-icon-list"></i> 工单列表
+            </a>
+          </dd>
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1102" data-title="修改工单信息" data-url="/orders/edit">
+              <i class="layui-icon layui-icon-edit"></i> 修改工单信息
+            </a>
+          </dd>
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1104" data-title="发起工单" data-url="/orders/report">
+              <i class="layui-icon layui-icon-release"></i> 发起工单
+            </a>
+          </dd>
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1105" data-title="任务类型管理" data-url="/orders/task_type">
+              <i class="layui-icon layui-icon-template-1"></i> 任务类型管理
+            </a>
+          </dd>
+        </dl>
+      </li>
+
+      <!-- 菜单项 2: 委外业务管理 (15xx) - 新增板块 -->
+      <li class="layui-nav-item">
+        <a href="javascript:;"><i class="layui-icon layui-icon-transfer"></i> &nbsp;委外业务管理</a>
+        <dl class="layui-nav-child">
+            <dd>
+                <!-- 原 1103 的供应商管理移动到了 1501 -->
+                <a href="javascript:;" class="site-menu-active" data-id="1501" data-title="委外供应商管理" data-url="/orders/outsource_units">
+                    <i class="layui-icon layui-icon-user"></i> 委外供应商管理
+                </a>
+            </dd>
+            <dd>
+                <a href="javascript:;" class="site-menu-active" data-id="1502" data-title="需求科室验收" data-url="/v/use_acceptance">
+                    <i class="layui-icon layui-icon-survey"></i> 需求科室验收
+                </a>
+            </dd>
+            <dd>
+                <a href="javascript:;" class="site-menu-active" data-id="1503" data-title="管理科室验收" data-url="/v/manager/acceptance">
+                    <i class="layui-icon layui-icon-rmb"></i> 管理科室验收
+                </a>
+            </dd>
+            <dd>
+                <a href="javascript:;" class="site-menu-active" data-id="1504" data-title="委外费用结算" data-url="/v/manager/check_price">
+                    <i class="layui-icon layui-icon-rmb"></i> 委外费用结算
+                </a>
+            </dd>
+        </dl>
+      </li>
+
+      <!-- 菜单项 3: 排班与任务 (12xx) -->
+      <li class="layui-nav-item">
+        <a href="javascript:;"><i class="layui-icon layui-icon-date"></i> &nbsp;排班与任务</a>
+        <dl class="layui-nav-child">
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1201" data-title="排班表" data-url="/schedule/custom_calendar">
+              <i class="layui-icon layui-icon-table"></i> 排班表
+            </a>
+          </dd>
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1202" data-title="班次定义" data-url="/schedule/shift_rule">
+              <i class="layui-icon layui-icon-time"></i> 班次定义
+            </a>
+          </dd>
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1203" data-title="排班配置" data-url="/schedule/config">
+              <i class="layui-icon layui-icon-engine"></i> 排班配置
+            </a>
+          </dd>
+        </dl>
+      </li>
+
+      <!-- 菜单项 4: 物资管理 (13xx) -->
+      <li class="layui-nav-item">
+        <a href="javascript:;"><i class="layui-icon layui-icon-component"></i> &nbsp;物资管理</a>
+        <dl class="layui-nav-child">
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1301" data-title="物资请购" data-url="/materials/apply_page">
+              <i class="layui-icon layui-icon-cart-simple"></i> 物资请购
+            </a>
+          </dd>
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1302" data-title="物资审批" data-url="/materials/approve_page">
+              <i class="layui-icon layui-icon-auz"></i> 物资审批
+            </a>
+          </dd>
+          <dd>
+            <a href="javascript:;" class="site-menu-active" data-id="1303" data-title="库存查询" data-url="/materials/stock_table">
+              <i class="layui-icon layui-icon-chart-screen"></i> 库存查询
+            </a>
+          </dd>
+        </dl>
+      </li>
+    </ul>
+  </div>
+
+  <!-- 右侧内容区 (Tabs) -->
+  <div class="wb-content">
+    <div class="layui-tab layui-tab-card" lay-allowClose="true" lay-filter="wb-tab">
+      <ul class="layui-tab-title">
+        <!-- 首页标题，lay-id="1" (与菜单保持一致) -->
+        <li class="layui-this" lay-id="1"><i class="layui-icon layui-icon-home"></i> 工作台首页</li>
+      </ul>
+      <div class="layui-tab-content">
+        <div class="layui-tab-item layui-show">
+            <!-- 
+                重要：data-id="1" 必须与菜单的 data-id="1" 以及首页卡片逻辑一致
+            -->
+            <iframe src="/orders/dashboard_index" data-id="1" class="wb-iframe" frameborder="0" scrolling="yes"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['element', 'jquery', 'layer'], function(){
+  var element = layui.element;
+  var $ = layui.jquery;
+  var layer = layui.layer;
+
+  // 定义存储的 Key
+  var TAB_CACHE_KEY = 'ehs_tab_cache';
+
+  // --------------------------------------------------------------------------
+  // 1. 核心工具函数：保存当前 Tab 状态到 sessionStorage
+  // --------------------------------------------------------------------------
+  function saveTabState() {
+    var tabs = [];
+    // 遍历所有 Tab 标题（排除首页 id=0）
+    $('.layui-tab-title li[lay-id]').each(function(){
+      var id = $(this).attr('lay-id');
+      
+      // 跳过首页，不保存首页，因为它是写死的
+      if(id === '0') return; 
+
+      var title = $(this).text();
+      // 获取对应内容的 iframe src
+      // 注意：这里利用了你在创建 iframe 时加的 data-id 属性来精确定位
+      var src = $('.wb-iframe[data-id="'+id+'"]').attr('src');
+      
+      if(id && src) {
+        tabs.push({
+          id: id,
+          title: title,
+          url: src // 保存 URL 用于恢复
+        });
+      }
+    });
+
+    // 获取当前激活的 Tab ID
+    var currentId = $('.layui-tab-title .layui-this').attr('lay-id');
+
+    // 存入 sessionStorage
+    sessionStorage.setItem(TAB_CACHE_KEY, JSON.stringify({
+      list: tabs,
+      current: currentId
+    }));
+  }
+
+  // --------------------------------------------------------------------------
+  // 2. 页面初始化：恢复 Tab (刷新时执行)
+  // --------------------------------------------------------------------------
+  function restoreTabs() {
+    var cache = sessionStorage.getItem(TAB_CACHE_KEY);
+    if (!cache) return;
+
+    try {
+      var data = JSON.parse(cache);
+      
+      // 循环恢复 Tab
+      if (data.list && data.list.length > 0) {
+        $.each(data.list, function(index, item) {
+          // 检查是否已存在（防止重复逻辑）
+          if ($("li[lay-id='" + item.id + "']").length === 0) {
+            // 恢复时，为了体验，通常不再进行 ajax 权限探路，而是直接加载 iframe
+            // 如果 session 过期，iframe 内部会跳转登录页，逻辑是自洽的
+            var content = '<iframe data-id="'+item.id+'" src="'+item.url+'" class="wb-iframe"></iframe>';
+            element.tabAdd('wb-tab', {
+              title: item.title,
+              content: content,
+              id: item.id
+            });
+          }
+        });
+      }
+
+      // 切换回上次选中的 Tab
+      if (data.current && data.current !== '0') {
+        element.tabChange('wb-tab', data.current);
+      }
+    } catch (e) {
+      console.error('Tab恢复失败', e);
+    }
+  }
+
+  // 执行恢复
+  restoreTabs();
+
+
+  // --------------------------------------------------------------------------
+  // 3. 事件监听
+  // --------------------------------------------------------------------------
+
+  // A. 监听左侧菜单点击 (添加 Tab)
+  $('.site-menu-active').on('click', function(){
+    var data = $(this);
+    var url = data.attr('data-url');
+    var id = data.attr('data-id');
+    var title = data.attr('data-title');
+
+    if(!url || url === 'javascript:;') return;
+
+    var exist = $("li[lay-id='" + id + "']").length;
+    
+    if (exist > 0) {
+      element.tabChange('wb-tab', id);
+      // 切换也需要保存状态(更新 currentId)
+      saveTabState();
+    } else {
+      var loadIndex = layer.load(2, {shade: [0.1, '#fff']});
+      $.ajax({
+        url: url,
+        type: 'GET',
+        headers: { "X-Check-Perm": "1" }, 
+        success: function(res) {
+          layer.close(loadIndex);
+          
+          var content = '<iframe data-id="'+id+'" src="'+url+'" class="wb-iframe"></iframe>';
+          
+          element.tabAdd('wb-tab', {
+            title: title,
+            content: content,
+            id: id
+          });
+          
+          element.tabChange('wb-tab', id);
+          
+          // 【关键】添加成功后，保存状态
+          saveTabState();
+        },
+        error: function(xhr) {
+          layer.close(loadIndex);
+          // 这里的错误提示可以使用之前提到的全局处理或单独处理
+          layer.msg('无法打开页面: ' + xhr.status, {icon: 2});
+        }
+      });
+    }
+  });
+
+  // B. 监听 Tab 删除事件
+  element.on('tabDelete(wb-tab)', function(data){
+    // Tab 删除后，重新保存状态
+    saveTabState();
+  });
+
+  // C. 监听 Tab 切换事件
+  element.on('tab(wb-tab)', function(data){
+    // 切换 Tab 后，保存当前的选中 ID
+    saveTabState();
+  });
+
+});
+</script>
+{% endblock %}

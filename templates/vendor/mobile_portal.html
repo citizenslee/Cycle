@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{ unit.unit_name}} - 委外供应商工作台</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <link rel="icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+    <style>   
+     /* --- 品牌头部 --- */
+    .brand-header {
+      text-align: center;
+      padding: 20px 0 10px;
+    }
+    .brand-logo {
+      height: 40px;
+      object-fit: contain;
+    }
+
+        /* === 样式复用区 === */
+        body { background-color: #f4f7f9; padding: 15px; color: #333; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        .layui-tab-brief { margin-bottom: 20px; }
+        .layui-tab-title { background: #fff; border-radius: 8px; border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.03); height: 50px; line-height: 50px; }
+        .layui-tab-brief > .layui-tab-title .layui-this { color: #1E9FFF !important; font-weight: bold; }
+        .layui-tab-brief > .layui-tab-title .layui-this:after { border-bottom: 3px solid #1E9FFF; height: 35px; }
+        
+        .record-item { background: #fff; padding: 20px 25px; border-radius: 4px 8px 8px 4px; margin-bottom: 20px; position: relative; border: 1px solid #eef2f6; border-left: 6px solid #1E9FFF; box-shadow: 0 3px 10px rgba(0,0,0,0.04); transition: all 0.3s ease; }
+        .record-item:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(30, 159, 255, 0.15); }
+        .record-item[data-tab="done"] { border-left-color: #52c41a; }
+        
+        .status-tag { position: absolute; right: 15px; top: 18px; padding: 4px 12px; color: #fff; font-size: 12px; border-radius: 4px; font-weight: 500; }
+        .st-todo { background-color: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; }
+        .st-done { background-color: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+
+        .record-item h3 { font-size: 17px; font-weight: 600; color: #2c3e50; padding-right: 80px; margin-bottom: 18px; display: flex; align-items: center; }
+        .phone-link a{
+                        color: #1e9fff;           /* layui 主蓝色 */
+                        text-decoration: none;
+                        font-weight: 500;
+                    }
+                    .phone-link a:hover{
+                        text-decoration: underline;
+                    }
+                    .phone-link i{
+                        font-size: 14px;
+                    }
+        /* 折叠面板 - 箭头在右侧 */
+        .layui-collapse { border: none; }
+        .layui-colla-item { border: 1px solid #f2f3f5; margin-bottom: 10px; border-radius: 6px !important; overflow: hidden; }
+        .layui-colla-title { background-color: #fafafa !important; font-size: 14px; height: 40px; line-height: 40px; color: #555; padding-left: 15px !important; padding-right: 40px !important; position: relative; }
+        .layui-colla-title .layui-colla-icon { left: auto !important; right: 15px !important; top: 10px; color: #999; }
+        .layui-colla-content { padding: 15px !important; border-top: none; color: #666; }
+
+        .row-kv { display: flex; padding: 8px 0; align-items: flex-start; }
+        .k { width: 90px; color: #999; font-size: 13px; flex-shrink: 0; }
+        .v { flex: 1; color: #333; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+        .imgs img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; border: 1px solid #eee; margin-right: 5px; cursor: pointer; }
+
+        .action-box { padding: 15px; background: #f9f9f9; border-radius: 8px; margin-top: 15px; text-align: center; border: 1px dashed #ddd; }
+        .empty-state { text-align: center; padding: 60px 0; display: none; }
+        .empty-state i { font-size: 60px; color: #e0e0e0; margin-bottom: 15px; display: block; }
+        .empty-state p { color: #999; font-size: 14px; }
+
+        /* === 新增：上传图片预览的样式 === */
+        .upload-preview-item {
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        .upload-preview-item:hover {
+            opacity: 0.8;
+            border-color: #ff5722 !important; /* 悬停显示红色边框提示删除 */
+        }
+        /* 在图片上显示一个小的删除角标 (可选) */
+        .upload-preview-item::after {
+            content: "×";
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ff5722;
+            color: #fff;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            text-align: center;
+            line-height: 14px;
+            font-size: 14px;
+            display: none;
+        }
+        .upload-preview-item:hover::after {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+  <!-- Logo -->
+  <div class="brand-header">
+    <img src="{{ url_for('static', filename='photo/fxjk-logo.png') }}" class="brand-logo" alt="Logo">
+  </div>
+<div class="layui-tab layui-tab-brief" lay-filter="tab">
+    <ul class="layui-tab-title" style="text-align:center;">
+        <li class="layui-this" lay-id="todo">进行中</li>
+        <li lay-id="done">历史记录</li>
+    </ul>
+</div>
+
+<div id="listBody" style="max-width: 900px; margin: 0 auto;">
+    {% for order in orders %}
+    <!-- 统一标准：data-tab 直接由后端计算 -->
+    <div class="card record-item" 
+         data-id="{{ order.id }}" 
+         data-status="{{ order.status }}"
+         data-tab="{{ 'todo' if order.status < 32 else 'done' }}">
+         <!-- 卡片内容... -->
+        <span class="status-tag {{ 'st-todo' if order.status < 32 else 'st-done' }}">
+            {% if order.status == 12 %}
+            待到达现场
+            {% elif order.status == 22 %}
+            处理中
+            {% elif order.status == 32 %}
+            待【{{ order.use_department_name }}】验收
+            {% elif order.status == 33 %}
+            待【{{ order.outsourcing_unit_by_dept_name }}】验收
+            {% elif order.status == 34 %}
+            待核价
+            {% elif order.status == 35 %}
+            已核价
+            {% else %}
+            未知状态
+            {% endif %}
+        </span>
+        
+        <h3>委外工单号 #{{ order.id }}</h3>
+
+        <div class="layui-collapse">
+             <!-- 1.需求信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">1. 基础信息</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">关联工单</span><span class="v">{{ order.work_order_id }}</span></div>
+                    <div class="row-kv"><span class="k">发起时间</span><span class="v">{{ order.assigned_at }}</span></div>           
+                    <div class="row-kv"><span class="k">需求科室</span><span class="v">{{ order.use_department_name }}</span></div>
+                    <div class="row-kv"><span class="k">地点</span><span class="v">{{ order.location }}</span></div>
+                    <div class="row-kv"><span class="k">需求内容</span><span class="v">{{ order.demand }}</span></div>
+                    <div class="row-kv">
+                    <span class="k">联系电话</span>
+                    <span class="v phone-link"> <a href="tel:{{ order.contact_phone }}"><i class="layui-icon layui-icon-phone"></i>{{ order.contact_phone }}</a></span>
+                    </div>
+                    <div class="row-kv"><span class="k">备注</span><span class="v">{{ order.remark }}</span></div>
+                    <div class="row-kv"><span class="k">委外单位</span><span class="v">{{ order.unit_name }}</span></div>
+                </div>
+            </div>
+            {% if order.quoted_amount %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">2. 供应商实施信息</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">响应时间</span><span class="v">{{ order.vendor_arrive_at }}</span></div>
+                    <div class="row-kv"><span class="k">完成时间</span><span class="v">{{ order.vendor_finished_at }}</span></div>
+                    <div class="row-kv"><span class="k">工程量概述</span><span class="v" style="white-space: pre-wrap;">{{ order.work_content }}</span></div>
+                    <div class="row-kv"><span class="k">完工图片</span><div class="v imgs" id="vp_{{order.id}}">
+                        {% for p in order.vendor_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('vp_{{order.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">申报报价</span><span class="v" style="color:#ff5722; font-weight:bold; font-size:large;">¥ {{ order.quoted_amount }}</span></div>
+                </div>
+            </div>
+            {% else %}
+            {% endif %}
+
+            {% if order.use_department_username %}
+            <!-- 3.需求科室意见信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">3. 需求科室【{{ order.use_department_name }}】验收意见</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">验收结论</span><span class="v">{{ order.evaluation_comment }}</span></div>
+                    <div class="row-kv"><span class="k">验收人</span><span class="v">{{ order.use_department_username }}</span></div>
+                </div>
+            </div>
+            {% else %}
+            {% endif %}
+            
+            {% if order.manager_department_username %}
+            <!-- 4.管理科室意见信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">4. 管理科室【{{ order.outsourcing_unit_by_dept_name }}】验收意见</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">验收结论</span><span class="v">{{ order.manager_evaluation }}</span></div>
+                    <div class="row-kv"><span class="k">验收图片</span><div class="v imgs" id="mp_{{order.id}}">
+                        {% for p in order.mgr_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('mp_{{order.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">验收人</span><span class="v">{{ order.manager_department_username }}</span></div>
+                </div>
+            </div>
+            {% else %}
+            {% endif %}
+
+            {% if order.cherck_amount_user %}
+             <!-- 5.核价信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title" style="color:#722ed1; font-weight: 600;">5. 核价信息</h2>
+                <div class="layui-colla-content layui-show">
+                        <div class="row-kv"><span class="k">核定金额</span><span class="v" style="color:#52c41a; font-weight: bold;font-size:large;">¥ {{ order.final_amount }}</span></div>
+                        <div class="row-kv"><span class="k">核价说明</span><span class="v">{{ order.final_amount_reason }}</span></div>
+                        <div class="row-kv"><span class="k">核价人</span><span class="v">{{ order.cherck_amount_user }}</span></div>
+                </div>
+            </div>
+            {% else %}
+            {% endif %}
+
+            <!-- 操作区：仅在进行中状态显示 -->
+            {% if order.status < 32 %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title" style="color:#1E9FFF; font-weight:bold;">当前操作</h2>
+                <div class="layui-colla-content layui-show">
+                    <div class="action-box">
+                        {% if order.status == 12 %}
+                            <p style="margin-bottom:10px; color:#666;">到达现场后请点击确认</p>
+                            <button class="layui-btn layui-btn-normal layui-btn-fluid" onclick="updateStatus({{ order.id }}, 'arrive')">
+                                <i class="layui-icon layui-icon-location"></i> 确认到达现场
+                            </button>
+                        {% elif order.status == 22 %}
+                            <p style="margin-bottom:10px; color:#666;">施工完成请填报信息</p>
+                            <button class="layui-btn layui-bg-blue layui-btn-fluid" onclick="openFinishModal({{ order.id }})">
+                                <i class="layui-icon layui-icon-ok-circle"></i> 完工申报
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    <div id="emptyState" class="empty-state"><i class="layui-icon layui-icon-face-smile"></i><p>暂无相关工单</p></div>
+</div>
+
+<!-- 完工申报弹窗 -->
+<div id="finishModal" style="display:none; padding:20px;">
+    <form class="layui-form layui-form-pane" lay-filter="finishForm">
+        <div class="layui-form-item">
+            <label class="layui-form-label">申报金额</label>
+            <div class="layui-input-block">
+                <input type="number" name="amount" required lay-verify="required" placeholder="¥" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item layui-form-text">
+            <label class="layui-form-label">具体工作内容</label>
+            <div class="layui-input-block">
+                <textarea name="content" required lay-verify="required" placeholder="请输入工程量/实施详情" class="layui-textarea"></textarea>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <button type="button" class="layui-btn layui-btn-primary layui-border-blue layui-btn-fluid" id="btnUpload">
+                <i class="layui-icon layui-icon-upload"></i> 上传完工照片 (必填)
+            </button>
+            <p style="color:#999; font-size:12px; margin-top:5px;">* 点击已上传的图片可删除</p>
+            <div id="previewBox" style="margin-top:10px; display:flex; gap:5px; flex-wrap:wrap;"></div>
+        </div>
+        <div style="margin-top:20px;">
+            <button type="button" class="layui-btn layui-btn-normal layui-btn-fluid" onclick="submitFinish()">提交完工</button>
+        </div>
+    </form>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['element', 'layer', 'upload', 'jquery'], function(){
+    var $ = layui.jquery, layer = layui.layer, element = layui.element, upload = layui.upload;
+    var uploadFiles = []; // 存储待上传文件
+    window.curId = null;
+
+    // ==========================================
+    // 通用 Tab 切换逻辑 (所有页面通用)
+    // ==========================================
+    function checkEmpty(tabName) {
+        var visibleCount = 0;
+        $('.record-item').each(function(){
+            // 直接读取 HTML 中预计算好的 data-tab 属性
+            var itemTab = $(this).attr('data-tab'); 
+            
+            if(itemTab === tabName) {
+                $(this).show();
+                visibleCount++;
+            } else {
+                $(this).hide();
+            }
+        });
+
+        // 控制空状态图片的显示/隐藏
+        if(visibleCount === 0) {
+            $('#emptyState').show();
+        } else {
+            $('#emptyState').hide();
+        }
+    }
+
+    // 1. 初始化：默认显示待办 (todo)
+    checkEmpty('todo');
+
+    // 2. 监听 Tab 点击切换
+    // 注意：Tab 的 lay-id 必须设置为 'todo' 和 'done'
+    element.on('tab(tab)', function(data){
+        var selectedTab = $(this).attr('lay-id'); // 获取点击的 lay-id
+        checkEmpty(selectedTab);
+    });
+
+    // 2. 图片预览 (历史记录查看)
+    window.viewImgs = function(id){ layer.photos({ photos: '#'+id, anim: 5, shade: 0.6 }); };
+
+    // 3. API: 确认到达
+    window.updateStatus = function(id, action) {
+        layer.confirm('确认执行此操作？', function(index){
+            layer.close(index);
+            var loadIdx = layer.load(2);
+            $.post('/v/api/update_status', {id: id, action: action}, function(res){
+                layer.close(loadIdx);
+                if(res.code===0) { layer.msg('操作成功', {icon:1}, function(){ location.reload(); }); }
+                else { layer.msg(res.msg, {icon:2}); }
+            });
+        });
+    };
+
+    // 4. 完工申报逻辑 (包含完整的上传配置)
+    window.openFinishModal = function(id) {
+        window.curId = id;
+        uploadFiles = []; // 重置文件数组
+        $('#previewBox').html(''); // 清空预览区
+        
+        // 重置表单值
+        $('[name="amount"]').val('');
+        $('[name="content"]').val('');
+        
+        // 打开弹窗
+        layer.open({
+            type: 1, 
+            title: '完工申报', 
+            content: $('#finishModal'),
+            area: ['90%', 'auto'], 
+            maxWidth: 450, 
+            shadeClose: true
+        });
+        
+        // 初始化上传组件
+        upload.render({
+            elem: '#btnUpload', 
+            auto: false, 
+            multiple: true, 
+            accept: 'images',
+            choose: function(obj){
+                // 将每次选择的文件追加到文件队列
+                var files = this.files = obj.pushFile();
+
+                obj.preview(function(index, file, result){
+                    
+                    // === 限制 1: 检查文件大小 (5MB) ===
+                    if(file.size > 5 * 1024 * 1024) {
+                        delete files[index]; // 从队列中移除
+                        layer.msg('文件 "' + file.name + '" 超过 5MB，无法上传', {icon: 5, anim: 6});
+                        return; // 跳过后续逻辑
+                    }
+
+                    // === 限制 2: 检查文件数量 (最多5张) ===
+                    if(uploadFiles.length >= 5) {
+                        delete files[index]; // 从队列中移除
+                        layer.msg('最多只能上传 5 张图片', {icon: 5, anim: 6});
+                        return; // 跳过后续逻辑
+                    }
+
+                    // --- 校验通过，执行逻辑 ---
+
+                    // 1. 将文件加入提交数组
+                    uploadFiles.push(file);
+
+                    // 2. 创建图片 DOM
+                    var $img = $('<img src="'+ result +'" title="点击删除" class="upload-preview-item">');
+                    $img.css({
+                        'width': '60px', 
+                        'height': '60px', 
+                        'object-fit': 'cover', 
+                        'border-radius': '4px',
+                        'border': '1px solid #eee'
+                    });
+
+                    // 3. 将文件对象和索引绑定到 DOM 上，方便后续删除
+                    $img.data('file', file);
+                    $img.data('index', index);
+
+                    // 4. 点击删除事件
+                    $img.on('click', function(){
+                        var fileToRemove = $(this).data('file');
+                        var idxToRemove = $(this).data('index');
+                        
+                        // 从自定义提交数组中移除该文件
+                        uploadFiles = uploadFiles.filter(function(f){
+                            return f !== fileToRemove;
+                        });
+                        
+                        // 从 Layui 的 files 队列中删除
+                        delete files[idxToRemove];
+
+                        // 移除 DOM 元素
+                        $(this).remove();
+                        layer.msg('图片已移除', {time: 800});
+                    });
+
+                    $('#previewBox').append($img);
+                });
+            }
+        });
+    };
+
+    // 5. 提交完工
+    window.submitFinish = function() {
+        var amount = $('[name="amount"]').val();
+        var content = $('[name="content"]').val();
+        
+        if(!amount || !content) return layer.msg('请填写金额和内容', {icon: 5, anim: 6});
+        if(uploadFiles.length === 0) return layer.msg('请至少上传一张照片', {icon: 5, anim: 6});
+
+        var fd = new FormData();
+        fd.append('id', window.curId);
+        fd.append('action', 'finish');
+        fd.append('quoted_amount', amount);
+        fd.append('work_content', content);
+        
+        // 循环添加文件
+        $.each(uploadFiles, function(i, file){ 
+            fd.append('photos[]', file); 
+        });
+
+        var loadIdx = layer.load(2);
+        $.ajax({
+            url: '/v/api/update_status', 
+            type: 'POST', 
+            data: fd,
+            processData: false, 
+            contentType: false,
+            success: function(res){
+                layer.close(loadIdx);
+                if(res.code===0) { 
+                    layer.msg('提交成功', {icon:1}, function(){ location.reload(); }); 
+                } else { 
+                    layer.msg(res.msg, {icon:2}); 
+                }
+            },
+            error: function(){
+                layer.close(loadIdx);
+                layer.msg('网络请求失败', {icon:2});
+            }
+        });
+    };
+});
+</script>
+</body>
+</html>

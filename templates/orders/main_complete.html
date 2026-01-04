@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>工单完工结算 - 智能控制台</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        /* 布局锁定，防止滚动条抖动 */
+        body, html { height: 100%; margin: 0; padding: 0; background-color: #f8f9fa; overflow: hidden; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+        
+        .master-wrapper { display: flex; flex-direction: column; height: 100vh; }
+
+        /* 顶部导航区 */
+        .master-header { background: #fff; padding: 20px 0 10px; border-bottom: 1px solid #eee; flex-shrink: 0; z-index: 10; }
+        
+        /* 步骤条样式 (保持之前的精美设计) */
+        .step-container { margin: 0 auto; max-width: 800px; padding: 0 20px; }
+        .step-list { display: flex; justify-content: space-between; position: relative; }
+        .step-list::before { content: ''; position: absolute; top: 14px; left: 0; right: 0; height: 2px; background: #eee; z-index: 0; }
+        .step-item { position: relative; z-index: 1; text-align: center; width: 25%; transition: all 0.3s; }
+        .step-circle { width: 30px; height: 30px; line-height: 30px; border-radius: 50%; background: #fff; border: 2px solid #eee; color: #999; margin: 0 auto 5px; font-weight: bold; font-size: 14px; transition: all 0.3s; }
+        .step-title { font-size: 13px; color: #999; }
+        
+        .step-item.active .step-circle { background: #16baaa; color: #fff; border-color: #16baaa; box-shadow: 0 0 0 3px rgba(22, 186, 170, 0.2); }
+        .step-item.active .step-title { color: #333; font-weight: 600; }
+        .step-item.done .step-circle { background: #5FB878; color: #fff; border-color: #5FB878; }
+
+        /* 中间 Iframe 内容区 */
+        .master-content { flex-grow: 1; position: relative; background: #f8f9fa; }
+        
+        /* 关键：Iframe 丝滑切换动画 */
+        .step-iframe {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: none;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.98) translateY(10px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* 贝塞尔曲线平滑动画 */
+        }
+        .step-iframe.active {
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1) translateY(0);
+        }
+
+        /* 底部操作栏 */
+        .master-footer { 
+            background: #fff; 
+            padding: 12px 25px; 
+            border-top: 1px solid #eee; 
+            text-align: right; 
+            flex-shrink: 0; 
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.03); 
+        }
+    </style>
+</head>
+<body>
+
+<div class="master-wrapper">
+    <!-- 1. 顶部步骤导航 -->
+    <div class="master-header">
+        <div class="step-container">
+            <div class="step-list">
+                <div class="step-item active" id="nav-1">
+                    <div class="step-circle">1</div>
+                    <div class="step-title">智能核算</div>
+                </div>
+                <div class="step-item" id="nav-2">
+                    <div class="step-circle">2</div>
+                    <div class="step-title">关联设备</div>
+                </div>
+                <div class="step-item" id="nav-3">
+                    <div class="step-circle">3</div>
+                    <div class="step-title">物资消耗</div>
+                </div>
+                <div class="step-item" id="nav-4">
+                    <div class="step-circle">4</div>
+                    <div class="step-title">确认提交</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Iframe 预加载容器 -->
+    <div class="master-content" id="iframeContainer">
+        <!-- 注意：这里建议在后端渲染时填入正确的模板路径 -->
+        <iframe id="iframe-1" src="/orders/complete/step1/{{ order.id }}" class="step-iframe active"></iframe>
+        <iframe id="iframe-2" src="/orders/complete/step2/{{ order.id }}" class="step-iframe"></iframe>
+        <iframe id="iframe-3" src="/orders/complete/step3/{{ order.id }}" class="step-iframe"></iframe>
+        <iframe id="iframe-4" src="/orders/complete/_confirm/{{ order.id }}" class="step-iframe"></iframe>
+    </div>
+
+    <!-- 3. 固定底部按钮 -->
+    <div class="master-footer">
+        <button type="button" class="layui-btn layui-btn-primary" id="btnPrev" style="display: none;">上一步</button>
+        <button type="button" class="layui-btn layui-btn-normal" id="btnNext">下一步</button>
+        <button type="button" class="layui-btn layui-btn-danger" id="btnSubmit" style="display: none;">确认结算并提交</button>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    // === 全局数据仓库 (由主页面维护，子页面读写) ===
+    window.WORK_ORDER_DATA = {
+        work_id: "{{ order.id }}",
+        hospital_id: "{{ order.id_created_hospital }}",
+        // 第一步数据
+        ai_suggested: {}, 
+        scores: {
+            task_type_id: null,
+            base_score: 0,
+            coefficient: 1.0,
+            arrive_score: 0,
+            repair_score: 0,
+            total_score: 0
+        },
+        staff_str: "",
+        // 第二步数据
+        device_id: null,
+        device_name: "",
+        // 第三步数据
+        materials: [], // [{id, name, qty, price}]
+        total_mat_cost: 0
+    };
+    console.log("主页面初始化 Hospital_ID:", window.WORK_ORDER_DATA.hospital_id);
+    layui.use(['layer', 'element'], function(){
+        var $ = layui.$, layer = layui.layer;
+        var currentStep = 1;
+
+        // 获取 iframe 窗口对象
+        function getIframeWin(step) {
+            return document.getElementById('iframe-' + step).contentWindow;
+        }
+
+        // 核心跳转逻辑
+        window.goStep = function(step) {
+            // 1. 更新步骤条 UI
+            $('.step-item').removeClass('active done');
+            for(var i=1; i<step; i++) $('#nav-' + i).addClass('done');
+            $('#nav-' + step).addClass('active');
+
+            // 2. 切换 Iframe 显示 (利用 CSS Transition)
+            $('.step-iframe').removeClass('active');
+            $('#iframe-' + step).addClass('active');
+
+            // 3. 底部按钮显隐控制
+            $('#btnPrev').toggle(step > 1);
+            $('#btnNext').toggle(step < 4);
+            $('#btnSubmit').toggle(step === 4);
+
+            currentStep = step;
+
+            // 4. 生命周期触发：如果进入第4步，通知子页面重新渲染汇总数据
+            if(step === 4 && getIframeWin(4).renderSummary) {
+                getIframeWin(4).renderSummary();
+            }
+        };
+
+        // 下一步按钮逻辑
+        $('#btnNext').click(function(){
+            var win = getIframeWin(currentStep);
+            
+            // 调用子页面的校验函数
+            if(win.validateStep && typeof win.validateStep === 'function') {
+                if(win.validateStep()){
+                    goStep(currentStep + 1);
+                }
+            } else {
+                // 如果子页面没写校验函数，直接放行
+                goStep(currentStep + 1);
+            }
+        });
+
+        // 上一步按钮
+        $('#btnPrev').click(function(){
+            goStep(currentStep - 1);
+        });
+
+        // 最终提交
+        $('#btnSubmit').click(function(){
+            var win = getIframeWin(4);
+            if(win.doSubmit) win.doSubmit();
+        });
+
+        // 监听来自子页面的跳转指令 (可选)
+        window.addEventListener('message', function(e){
+            if(e.data === 'next') $('#btnNext').click();
+            if(e.data === 'prev') $('#btnPrev').click();
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>故障上报</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 20px; background-color: #fff; font-family: sans-serif; }
+        .form-group { margin-bottom: 20px; }
+        .label-row { display: flex; align-items: center; margin-bottom: 8px; color: #333; font-weight: 600; font-size: 14px; }
+        .icon-box { width: 24px; height: 24px; background: #e6f7ff; border-radius: 50%; color: #16baaa; display: flex; align-items: center; justify-content: center; margin-right: 8px; }
+        .btn-submit { width: 100%; height: 44px; border-radius: 22px; background: #16baaa; font-size: 16px; font-weight: bold; box-shadow: 0 4px 10px rgba(22, 186, 170, 0.3); border: none; }
+        .device-info { background: #f9f9f9; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; color: #666; }
+    </style>
+</head>
+<body>
+
+    <div class="device-info">
+        <div><i class="layui-icon layui-icon-app"></i> 设备：{{ device.name }}</div>
+        <div style="margin-top:5px;"><i class="layui-icon layui-icon-group"></i> 管理：{{ device.department_name }}</div>
+    </div>
+
+    <form class="layui-form" id="reportForm">
+        <input type="hidden" name="device_id" value="{{ device.id }}">
+
+        <!-- 地点 -->
+        <div class="form-group">
+            <div class="label-row">
+                <div class="icon-box"><i class="layui-icon layui-icon-location"></i></div>
+                <span>故障地点</span>
+            </div>
+            <!-- 自动回填设备安装位置 -->
+            <input type="text" name="location" value="{{ device.install_location or '' }}" 
+                   lay-verify="required" placeholder="请确认故障具体位置" class="layui-input">
+        </div>
+
+        <!-- 内容 (非必填) -->
+        <div class="form-group">
+            <div class="label-row">
+                <div class="icon-box"><i class="layui-icon layui-icon-edit"></i></div>
+                <span>情况说明</span>
+                <span style="font-weight:normal; font-size:12px; color:#aaa; margin-left:auto;">(选填)</span>
+            </div>
+            <textarea name="demand" placeholder="请简单描述故障现象，例如：无法启动、异响等..." 
+                      class="layui-textarea" style="height: 100px; resize: none;"></textarea>
+        </div>
+
+        <!-- 电话 (建议必填，方便联系) -->
+        <div class="form-group">
+            <div class="label-row">
+                <div class="icon-box"><i class="layui-icon layui-icon-cellphone"></i></div>
+                <span>联系电话</span>
+            </div>
+            <input type="text" name="contact_phone" placeholder="请输入您的联系方式" class="layui-input">
+        </div>
+
+        <!-- 提交按钮 -->
+        <div style="margin-top: 30px;">
+            <button class="layui-btn btn-submit" lay-submit lay-filter="submitReport">立即提交</button>
+        </div>
+    </form>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['form', 'layer', 'jquery'], function(){
+    var form = layui.form, layer = layui.layer, $ = layui.jquery;
+
+    // 监听提交
+    form.on('submit(submitReport)', function(data){
+        var loading = layer.msg('正在提交...', {icon: 16, shade: 0.3, time: 0});
+        
+        $.ajax({
+            url: '/devices/api/report_fault',
+            type: 'POST',
+            data: data.field,
+            success: function(res){
+                layer.close(loading);
+                if(res.code === 0){
+                    layer.msg('上报成功！维修人员将尽快处理。', {icon: 1, time: 2000}, function(){
+                        // 关闭当前 iframe
+                        var index = parent.layer.getFrameIndex(window.name); 
+                        parent.layer.close(index); 
+                    });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                }
+            },
+            error: function(){
+                layer.close(loading);
+                layer.msg('网络请求失败', {icon: 2});
+            }
+        });
+        return false;
+    });
+});
+</script>
+</body>
+</html>

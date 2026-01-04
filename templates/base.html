@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>{% block title %}智慧EHS工作台{% endblock %}</title>
+  <script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+  <script src="{{ url_for('static', filename='Sortable.min.js') }}"></script>
+
+  <style>
+    /* 全局基础样式 */
+    body { 
+      margin: 0; padding-top: 80px; 
+      background-color: #0f172a; color: #333; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    /* 头部导航样式 */
+    .tech-header {
+      height: 70px; padding: 0 40px; position: fixed; top: 0; width: 100%; z-index: 1000;
+      box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+      background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(15px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+    }
+    .header-logo img { height: 60px; }
+    .header-right { display: flex; align-items: center; gap: 20px; }
+    
+    .info-text-group { text-align: right; color: #1e293b; line-height: 1.2; }
+    .hospital-name { font-size: 14px; font-weight: 700; }
+    .dept-name { font-size: 12px; color: #64748b; }
+
+    /* 胶囊容器 */
+    .role-capsule {
+      background: rgba(230, 240, 255, 0.6); 
+      padding: 4px 12px 4px 6px; 
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      display: flex; align-items: center; gap: 8px; 
+      font-size: 13px; color: #334155; font-weight: 600;
+      transition: all 0.3s;
+    }
+    .role-capsule:hover {
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+
+    /* 身份角标 */
+    .role-badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      color: #fff; font-weight: normal; letter-spacing: 0.5px;
+      line-height: 1.4; white-space: nowrap;
+    }
+
+    .capsule-divider { width: 1px; height: 14px; background-color: #cbd5e1; }
+
+    /* --- 身份颜色定义 (对应新的权限体系) --- */
+    /* 蓝色: ST(员工), SE(受理工程师) */
+    .badge-blue {
+      background: linear-gradient(135deg, #6aafe6, #3e8bf4);
+      box-shadow: 0 2px 5px rgba(62, 139, 244, 0.3);
+    }
+    /* 红色: SA(超管), GA(集团) */
+    .badge-red {
+      background: linear-gradient(135deg, #ff8fa3, #ff4d4f);
+      box-shadow: 0 2px 5px rgba(255, 77, 79, 0.3);
+    }
+    /* 橙色: HA(院管), HP(院长) */
+    .badge-orange {
+      background: linear-gradient(135deg, #ffd591, #fa8c16);
+      box-shadow: 0 2px 5px rgba(250, 140, 22, 0.3);
+    }
+    /* 绿色: DA(科管), DH(科长), PA(采购) */
+    .badge-green {
+      background: linear-gradient(135deg, #95de64, #52c41a);
+      box-shadow: 0 2px 5px rgba(82, 196, 26, 0.3);
+    }
+    
+    .btn-login {
+      color: #fff; padding: 6px 20px; background: #1e9fff; border-radius: 50px; 
+      text-decoration: none; cursor: pointer; transition: 0.3s;
+    }
+    .btn-login:hover { opacity: 0.9; }
+    .btn-logout { color: #64748b; font-size: 20px; cursor: pointer; }
+    .btn-logout:hover { color: #ef4444; }
+
+    /* ===== 退出登录弹窗样式 ===== */
+    body .glass-blue-logout {
+        background: rgba(255, 255, 255, 0.85); 
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        box-shadow: 0 10px 40px rgba(30, 144, 255, 0.15);
+        border-radius: 12px;
+    }
+    body .glass-blue-logout .layui-layer-content {
+        padding: 35px 20px 15px 20px !important; text-align: center;
+        color: #4a5b6d; font-size: 16px; font-weight: 500;
+    }
+    body .glass-blue-logout .layui-layer-btn { padding-bottom: 25px; text-align: center; }
+    body .glass-blue-logout .layui-layer-btn a {
+        height: 36px; line-height: 36px; padding: 0 25px; border-radius: 18px;
+        font-size: 14px; margin: 0 12px; border: none;
+    }
+    body .glass-blue-logout .layui-layer-btn .layui-layer-btn0 {
+        background: linear-gradient(135deg, #6aafe6, #3e8bf4); color: #fff;
+    }
+    body .glass-blue-logout .layui-layer-btn .layui-layer-btn1 {
+        background: #f0f4f8; color: #7f8c9d;
+    }
+    .logout-icon-box {
+        width: 50px; height: 50px; line-height: 50px;
+        background: rgba(62, 139, 244, 0.1); border-radius: 50%;
+        color: #3e8bf4; font-size: 24px; margin: 0 auto 15px auto;
+        display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+  {% block styles %}{% endblock %}
+</head>
+<body>
+  <!-- 1. 顶部导航 -->
+  <div class="tech-header">
+    <div class="header-logo" onclick="location.href='/'" style="cursor:pointer;">
+      <img src="{{ url_for('static', filename='photo/fxjk-logo.png') }}" alt="Logo">
+    </div>
+    <div class="header-right">
+      {% if session.get("user_id") %}
+        
+        {# ================== 核心逻辑: 获取最高权限角色 ================== #}
+        {% set raw_roles = session.get("role", "") %}
+        {# 将 "SA,ST" 转换为列表 ["SA", "ST"]，并去除空格 #}
+        {% set my_roles = [] %}
+        {% for r in raw_roles.split(',') %}
+           {% set _ = my_roles.append(r.strip()) %}
+        {% endfor %}
+
+        {# 默认值 #}
+        {% set display_role = "未知" %}
+        {% set badge_class = "badge-blue" %}
+
+        {# 优先级判定 (SA > GA > HA/HP > DA/DH/PA > SE > ST) #}
+        {% if 'SA' in my_roles %}
+            {% set display_role = "超级管理员" %}
+            {% set badge_class = "badge-red" %}
+        {% elif 'GA' in my_roles %}
+            {% set display_role = "集团管理员" %}
+            {% set badge_class = "badge-red" %}
+        {% elif 'HP' in my_roles %}
+            {% set display_role = "院长" %}
+            {% set badge_class = "badge-orange" %}
+        {% elif 'HA' in my_roles %}
+            {% set display_role = "医院管理员" %}
+            {% set badge_class = "badge-orange" %}
+        {% elif 'DA' in my_roles %}
+            {% set display_role = "科室管理员" %}
+            {% set badge_class = "badge-green" %}
+        {% elif 'DH' in my_roles %}
+            {% set display_role = "科长" %}
+            {% set badge_class = "badge-green" %}
+        {% elif 'PA' in my_roles %}
+            {% set display_role = "采购管理员" %}
+            {% set badge_class = "badge-green" %}
+        {% elif 'SE' in my_roles %}
+            {% set display_role = "受理工程师" %}
+            {% set badge_class = "badge-blue" %}
+        {% elif 'ST' in my_roles %}
+            {% set display_role = "员工" %}
+            {% set badge_class = "badge-blue" %}
+        {% endif %}
+
+        <!-- ================== 界面显示 ================== -->
+        <div class="info-text-group">
+          <div class="hospital-name">{{ session.get("hospital_name", "未绑定院区") }}</div>
+          <div class="dept-name">{{ session.get("department_name", "") }}</div>
+        </div>
+
+        <div class="role-capsule">
+          <!-- 身份角标 -->
+          <span class="role-badge {{ badge_class }}">{{ display_role }}</span>
+          <!-- 分隔符 -->
+          <span class="capsule-divider"></span>
+          <!-- 用户名 -->
+          <i class="layui-icon layui-icon-user"></i> 
+          <span>{{ session.get("username") }}</span>
+        </div>
+
+        <a class="btn-logout" id="btnLogout"><i class="layui-icon layui-icon-logout"></i></a>
+      {% else %}
+        <a class="btn-login" href="{{ url_for('login.login') }}"><i class="layui-icon layui-icon-username"></i> 登录</a>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- 2. 内容区域 -->
+  <div style="min-height: 80vh;">
+    {% block content %}
+
+    {% endblock %}
+  </div>
+
+
+
+  {% block scripts %}{% endblock %}
+</body>
+
+<script>
+layui.use(['layer', 'jquery'], function(){
+  var $ = layui.jquery;
+  var layer = layui.layer;
+
+    // 1. 处理后端 Flash 消息 (普通页面跳转时的权限提示)
+    // 当后端执行 flash("无操作权限", "error") 时，这里会捕获并弹窗
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          // 如果是 error 类型，图标显示红叉(2)，否则显示对勾(1)
+          var iconType = "{{ category }}" === "error" ? 2 : 1;
+          layer.msg("{{ message }}", {icon: iconType, time: 2000});
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+
+ 
+ // 全局 AJAX 错误处理
+$(document).ajaxError(function(event, xhr, settings, thrownError) {
+    // 1. 关闭所有可能存在的 loading 层（防止接口报错后页面一直转圈）
+    console.log('1');
+    layer.closeAll('loading');
+
+    // 2. 如果请求被手动取消（abort），则不报错
+    if (xhr.statusText === 'abort') return;
+
+    // 3. 定义默认错误消息
+    var msg = '请求失败，请稍后重试';
+    var icon = 2; // 错误图标
+
+    // 4. 根据状态码判断错误类型
+    switch (xhr.status) {
+        case 400:
+            msg = '请求参数错误 (400)';
+            break;
+        case 401:
+            msg = '登录已失效，请重新登录';
+            // 在这里自动跳转到登录页
+           location.href = '/login.html'; 
+            break;
+        case 403:
+            msg = '抱歉，您没有权限操作';
+            break;
+        case 404:
+            msg = '请求的接口或页面不存在 (404)';
+            console.error('Missing URL:', settings.url); // 在控制台打印出错的URL方便调试
+            break;
+        case 408:
+            msg = '请求超时 (408)';
+            break;
+        case 500:
+            msg = '服务器内部错误 (500)';
+            break;
+        case 502:
+            msg = '网关错误 (502)';
+            break;
+        case 503:
+            msg = '服务不可用 (503)';
+            break;
+        case 504:
+            msg = '网关超时 (504)';
+            break;
+        default:
+            // 如果状态码是 0，通常是网络断网或跨域问题
+            if (xhr.status === 0) {
+                msg = '网络连接异常或跨域限制';
+            } else {
+                msg = '未知错误: ' + xhr.status;
+            }
+    }
+
+    // 5. 弹出全局提示
+    // 如果某个具体的 ajax 请求中不想显示全局报错，可以在 headers 里加个参数判断，或者在这里做 URL 过滤
+    layer.msg(msg, {
+        icon: icon,
+        time: 3000,
+        shift: 6 // 抖动效果
+    });
+});
+ 
+    // --- 【关键修改：AJAX 全局设置】 ---
+  // 这段代码会自动处理 400 错误，无需在每个 $.ajax 里手动加 token
+  $.ajaxSetup({
+      beforeSend: function(xhr, settings) {
+          if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+              var token = $('#csrf_token').val();
+              if (token) {
+                  xhr.setRequestHeader("X-CSRFToken", token);
+              }
+          }
+      }
+  });
+ 
+
+
+// 点击登出
+$(document).on("click", ".btn-logout", function () {
+
+    // 构造内容：圆形淡蓝底托 + 图标 + 文字
+    var contentHtml = 
+        '<div class="logout-icon-box">' +
+            '<i class="layui-icon layui-icon-logout"></i>' +
+        '</div>' +
+        '<div>确认退出？</div>';
+
+    layer.confirm(contentHtml, {
+        title: false,
+        closeBtn: 0,
+        skin: 'glass-blue-logout', // 绑定刚才写的CSS
+        area: ['320px', '220px'],
+        shade: [0.3, '#1a233a'],   // 遮罩改淡一点，带点深蓝倾向，不那么压抑
+        shadeClose: true,          // 点击遮罩也可以关闭
+        anim: 5,                   // 动画：渐显+轻微缩放 (Layui 动画5比较优雅)
+        btn: ['确认', '取消'],
+        btnAlign: 'c',
+        resize: false
+    }, function (index) {
+        // ===== 确认退出 =====
+        
+        // 关闭确认框
+        layer.close(index);
+
+        // 提示框也换个清新的风格
+        layer.msg('正在退出...即将返回首页', {
+            icon: 16, // 加载圈
+            shade: 0.1,
+            time: 1000,
+        }, function() {
+            window.location.href = "{{ url_for('login.logout') }}";
+        });
+
+    }, function () {
+        // 取消
+    });
+});
+
+});
+</script>
+
+</html>

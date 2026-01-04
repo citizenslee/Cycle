@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>指派人员</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 20px; background-color: #f2f2f2; }
+        .staff-card {
+            background: #fff;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #e6e6e6;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+        }
+        
+        /* 悬停效果 (仅针对未禁用的) */
+        .staff-card:not(.disabled):hover { 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+            border-color: #1e9fff; 
+        }
+
+        /* 选中状态 - 颜色加深 */
+        .staff-card.active { 
+            border-color: #16baaa; 
+            border-width: 2px; /* 边框变粗 */
+            background-color: #dffbf8; /* 更深的青色背景 */
+        }
+
+        /* 禁用状态 (忙碌) */
+        .staff-card.disabled {
+            background-color: #f8f8f8;
+            border-color: #eee;
+            cursor: not-allowed; /* 禁止手势 */
+            opacity: 0.6;
+            filter: grayscale(100%); /* 变灰 */
+        }
+
+        .staff-info h3 { font-size: 16px; font-weight: bold; }
+        .staff-info p { color: #666; font-size: 12px; margin-top: 5px; }
+        .status-badge { padding: 2px 6px; border-radius: 2px; font-size: 12px; }
+        .status-free { background: #e6f7ff; color: #1890ff; }
+        .status-busy { background: #fff1f0; color: #f5222d; }
+    </style>
+</head>
+<body>
+
+<div class="layui-fluid">
+    <div class="layui-card">
+        <div class="layui-card-header">
+            当前受理科室：<span style="color: #1e9fff; font-weight: bold;">{{ dept_name }}</span>
+            <span style="float: right; color: #999; font-size: 12px;">提示：可多选，忙碌人员不可点</span>
+        </div>
+        <div class="layui-card-body">
+            <form class="layui-form" lay-filter="dispatch-form">
+                <input type="hidden" name="work_id" value="{{ work_id }}">
+                <!-- 这里的 value 最后会变成 "张三,李四" -->
+                <input type="hidden" name="staff_name" id="selected_staff_name">
+                <input type="hidden" name="staff_phone" id="selected_staff_phone">
+
+                <div id="staff-list">
+                    {% if staff_list %}
+                        {% for person in staff_list %}
+                        <!-- 
+                           1. 增加 data-name/phone 方便JS读取
+                           2. 如果不是空闲，加上 disabled 类
+                        -->
+                        <div class="staff-card" 
+                             data-name="{{ person.name }}" 
+                             onclick="toggleStaff(this)">
+                            <div class="staff-info">
+                                <h3>{{ person.name }}</h3>
+                            </div>
+                            <div>
+                                <!-- 选中图标 -->
+                                <i class="layui-icon layui-icon-ok-circle" style="display:none; color: #16baaa; font-size: 22px; margin-left: 10px; font-weight: bold;"></i>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="text-align: center; padding: 30px; color: #999;">
+                            <i class="layui-icon layui-icon-face-surprised" style="font-size: 40px;"></i>
+                            <p>该科室暂无配置可用人员 (available_staff.json)</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div style="text-align: center; margin-top: 20px; display: {% if staff_list %}block{% else %}none{% endif %}">
+                    <button type="button" class="layui-btn layui-btn-normal layui-btn-fluid" lay-submit lay-filter="submitDispatch">确认派单</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    layui.use(['form', 'layer', 'jquery'], function(){
+        var $ = layui.jquery;
+        var form = layui.form;
+        var layer = layui.layer;
+
+        // --- 点击切换逻辑 ---
+        window.toggleStaff = function(el) {
+            var $el = $(el);
+            var status = $el.data('status');
+
+
+            // 2. 切换选中样式 (多选)
+            if($el.hasClass('active')) {
+                $el.removeClass('active');
+                $el.find('.layui-icon-ok-circle').hide();
+            } else {
+                $el.addClass('active');
+                $el.find('.layui-icon-ok-circle').show();
+            }
+        };
+
+        // --- 提交表单 ---
+        form.on('submit(submitDispatch)', function(data){
+            var field = data.field;
+            
+            // 1. 遍历所有被选中的卡片，收集数据
+            var names = [];
+            var phones = [];
+            
+            $('.staff-card.active').each(function(){
+                names.push($(this).data('name'));
+                phones.push($(this).data('phone'));
+            });
+
+            // 2. 校验
+            if(names.length === 0) {
+                layer.msg('请至少选择一名工作人员', {icon: 2});
+                return false;
+            }
+
+            // 3. 填充隐藏域 (用逗号分隔)
+            field.staff_name = names.join(',');
+            field.staff_phone = phones.join(',');
+
+            // 4. 发送请求
+            var index = layer.load(2);
+            $.post('/orders/api/dispatch_confirm', field, function(res){
+                layer.close(index);
+                if(res.code === 0){
+                    layer.msg('派单成功', {icon: 1, time: 1000}, function(){
+                        // 关闭弹窗并刷新父页面
+                        var iframeIndex = parent.layer.getFrameIndex(window.name); 
+                        parent.layer.close(iframeIndex);
+                        // 根据你的父页面逻辑，可能是 search() 或者 reload()
+                        if(parent.table){
+                            parent.table.reload('ordersTable'); // 假设父页面表格ID是 ordersTable
+                        } else {
+                            parent.location.reload();
+                        }
+                    });
+                } else {
+                    layer.msg(res.msg, {icon: 2});
+                }
+            }).fail(function(){
+                layer.close(index);
+                layer.msg('网络错误', {icon: 2});
+            });
+            return false;
+        });
+    });
+</script>
+</body>
+</html>

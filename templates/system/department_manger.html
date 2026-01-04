@@ -1,0 +1,242 @@
+{% block content %}
+<script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+
+<div style="padding: 15px;">
+    <div class="layui-card">
+        <div class="layui-card-header">科室管理</div>
+        <div class="layui-card-body">
+            <!-- 搜索栏 -->
+            <form class="layui-form layui-row layui-col-space10" style="margin-bottom: 20px;">
+                <div class="layui-col-md3">
+                    <!-- 使用 current_level 判断 (90对应 GA/SA) -->
+                    {% if current_level < 90 %}
+                        <!-- 院级管理员：锁定显示本院 -->
+                        <input type="text" class="layui-input" value="{{ user.hospital_name }}" disabled readonly>
+                        <input type="hidden" name="search_hospital" value="{{ user.id_hospital }}">
+                    {% else %}
+                        <!-- 超管：显示下拉筛选 -->
+                        <select name="search_hospital" lay-filter="search_hospital">
+                            <option value="">全部医院</option>
+                            {% for h in hospitals %}
+                            <option value="{{ h.id_hospital }}">{{ h.hospital_name }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endif %}
+                </div>
+                <div class="layui-col-md2">
+                    <button class="layui-btn layui-btn-normal" type="button" id="doSearch">
+                        <i class="layui-icon layui-icon-search"></i> 搜索
+                    </button>
+                </div>
+            </form>
+
+            <table id="deptTable" lay-filter="deptTable"></table>
+            
+            <script type="text/html" id="toolbarDemo">
+                <div class="layui-btn-container">
+                    <button class="layui-btn layui-btn-sm" lay-event="add">新增科室</button>
+                </div>
+            </script>
+            <script type="text/html" id="barDemo">
+                <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+                <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+            </script>
+        </div>
+    </div>
+</div>
+
+<!-- 弹窗 -->
+<div id="deptForm" style="display:none; padding: 20px;">
+    <form class="layui-form" lay-filter="formFilter">
+        <input type="hidden" name="id_department">
+        
+        <div class="layui-form-item">
+            <label class="layui-form-label">所属医院</label>
+            <div class="layui-input-block">
+                {% if current_level < 90 %}
+                    <!-- 院级管理员：下拉框只读，value设为 user.id_hospital -->
+                    <select name="id_hospital" disabled>
+                        <option value="{{ user.id_hospital }}" selected>{{ user.hospital_name }}</option>
+                    </select>
+                {% else %}
+                    <!-- 超管：自由选择 -->
+                    <select name="id_hospital" lay-verify="required" id="form_hospital_select">
+                        <option value="">请选择</option>
+                        {% for h in hospitals %}
+                        <option value="{{ h.id_hospital }}">{{ h.hospital_name }}</option>
+                        {% endfor %}
+                    </select>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">科室名称</label>
+            <div class="layui-input-block">
+                <input type="text" name="department_name" required lay-verify="required" class="layui-input" placeholder="请输入科室名称">
+            </div>
+        </div>
+        
+        <div class="layui-form-item">
+            <label class="layui-form-label">科室角色</label>
+            <div class="layui-input-block">
+                <input type="radio" name="work_flag" value="1" title="职能科室（受理服务）" checked>
+                <input type="radio" name="work_flag" value="0" title="临床科室（需求服务）">
+            </div>
+        </div>
+
+        <div class="layui-form-item layui-form-text">
+            <label class="layui-form-label">描述</label>
+            <div class="layui-input-block">
+                <textarea name="description" class="layui-textarea"></textarea>
+            </div>
+        </div>
+
+        <div class="layui-form-item" style="text-align: right;">
+            <button class="layui-btn" lay-submit lay-filter="saveBtn">保存</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['table', 'form', 'layer', 'jquery'], function(){
+    var table = layui.table, form = layui.form, $ = layui.jquery;
+
+    // 后端传入的等级
+    var currentLevel = {{ current_level }}; 
+    var initialHospitalId = $('input[name="search_hospital"]').val() || "";
+
+    var tableIns = table.render({
+        elem: '#deptTable',
+        url: '/system/api/department',
+        // 这里的 where 会自动带上页面加载时的初始值 (如果是院管，则只查本院)
+        where: { id_hospital: initialHospitalId }, 
+        toolbar: '#toolbarDemo',
+        cols: [[
+            {field: 'id_department', title: 'ID', width: 60},
+            {field: 'hospital_name', title: '所属医院', width: 180},
+            {field: 'department_name', title: '科室名称', width: 150},
+            {field: 'department_url', title: 'URL标识', width: 120, templet: function(d){
+                return '<span style="color: #009688; font-weight: bold;">' + (d.department_url || '-') + '</span>';
+            }},
+            {field: 'work_flag', title: '科室角色', width: 120, templet: function(d){
+                return d.work_flag == 1 
+                    ? '<span class="layui-badge layui-bg-green">职能科室</span>' 
+                    : '<span class="layui-badge layui-bg-blue">临床科室</span>';
+            }},
+            {field: 'description', title: '描述'},
+            {fixed: 'right', title:'操作', toolbar: '#barDemo', width: 150}
+        ]],
+        page: true
+    });
+
+    // 搜索按钮事件
+    $('#doSearch').click(function(){
+        var hid = $('select[name="search_hospital"]').val();
+        if(!hid) {
+            hid = $('input[name="search_hospital"]').val();
+        }
+        
+        tableIns.reload({
+            where: { id_hospital: hid },
+            page: { curr: 1 }
+        });
+    });
+
+    // 工具栏事件
+    table.on('toolbar(deptTable)', function(obj){
+        if(obj.event === 'add') openForm("新增科室", {});
+    });
+
+    // 行工具事件
+    table.on('tool(deptTable)', function(obj){
+        if(obj.event === 'del'){
+            layer.confirm('确认删除该科室吗？', function(index){
+                $.ajax({
+                    url: '/system/api/department', 
+                    type: 'DELETE',
+                    contentType: 'application/json',
+                    data: JSON.stringify({id_department: obj.data.id_department}),
+                    success: function(res){
+                        if(res.code==0){ 
+                            obj.del(); 
+                            layer.close(index); 
+                            layer.msg('删除成功');
+                        } else {
+                            layer.msg(res.msg);
+                        }
+                    }
+                });
+            });
+        } else if(obj.event === 'edit'){
+            openForm("编辑科室", obj.data);
+        }
+    });
+
+    function openForm(title, data){
+        form.val("formFilter", {
+            "id_department": "", 
+            "department_name": "", 
+            "description": "", 
+            "work_flag": "1"
+        });
+
+        // 针对超管 (Level >= 90)：重置下拉框
+        if (currentLevel >= 90) {
+            $('#form_hospital_select').val(""); 
+            $('select[name="id_hospital"]').removeAttr('disabled'); 
+            form.render('select');
+        }
+
+        // 编辑模式回填
+        if(data.id_department) {
+            form.val("formFilter", {
+                "id_department": data.id_department,
+                "id_hospital": data.id_hospital,
+                "department_name": data.department_name,
+                "description": data.description,
+                "work_flag": data.work_flag.toString()
+            });
+            
+            // 编辑时必须锁定医院选择，否则会破坏编号规则
+            $('select[name="id_hospital"]').attr('disabled', 'disabled');
+            form.render('select');
+        }
+        
+        layer.open({
+            type: 1, 
+            title: title, 
+            area: ['600px', '450px'],
+            content: $('#deptForm'),
+            success: function(){
+                form.render();
+                
+                form.on('submit(saveBtn)', function(d){
+                    var method = d.field.id_department ? 'PUT' : 'POST';
+                    
+                    $.ajax({
+                        url: '/system/api/department', 
+                        type: method,
+                        contentType: 'application/json', 
+                        data: JSON.stringify(d.field),
+                        success: function(res){
+                            if(res.code===0){ 
+                                layer.closeAll(); 
+                                table.reload('deptTable'); 
+                                layer.msg('保存成功');
+                            } else {
+                                layer.msg(res.msg);
+                            }
+                        }
+                    });
+                    return false;
+                });
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

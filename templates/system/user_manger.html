@@ -1,0 +1,541 @@
+<script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+
+<style>
+.role-capsule {
+      background: rgba(230, 240, 255, 0.6); 
+      padding: 4px 12px 4px 6px; /* 左侧padding小一点是为了紧贴Badge */
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      
+      /* Flex布局实现内部元素垂直居中 */
+      display: flex;
+      align-items: center;
+      gap: 8px; 
+      
+      font-size: 13px;
+      color: #334155; /* 深灰蓝文字 */
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+    
+    .role-capsule:hover {
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+
+    /* 身份角标通用样式 */
+    .role-badge {
+      font-size: 15px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      color: #fff;
+      font-weight: normal;
+      letter-spacing: 0.5px;
+      line-height: 1.4;
+      white-space: nowrap; /* 防止换行 */
+    }
+
+    /* 竖线分隔符 */
+    .capsule-divider {
+      width: 1px;
+      height: 14px;
+      background-color: #cbd5e1;
+    }
+
+    /* --- 身份颜色定义 --- */
+    /* 蓝色 (普通员工) */
+    .badge-blue {
+      background: linear-gradient(135deg, #6aafe6, #3e8bf4);
+      box-shadow: 0 2px 5px rgba(62, 139, 244, 0.3);
+    }
+    /* 红色 (超级管理员) */
+    .badge-red {
+      background: linear-gradient(135deg, #ff8fa3, #ff4d4f);
+      box-shadow: 0 2px 5px rgba(255, 77, 79, 0.3);
+    }
+    /* 橙色 (高层/集团管理) */
+    .badge-orange {
+      background: linear-gradient(135deg, #ffd591, #fa8c16);
+      box-shadow: 0 2px 5px rgba(250, 140, 22, 0.3);
+    }
+    /* 绿色 (科室管理) */
+    .badge-green {
+      background: linear-gradient(135deg, #95de64, #52c41a);
+      box-shadow: 0 2px 5px rgba(82, 196, 26, 0.3);
+    }
+            /* staff_flag 胶囊 */
+        .staff-capsule {
+        background: rgba(240, 253, 244, 0.6);
+        padding: 4px 12px;
+        border-radius: 20px;
+        border: 1px solid rgba(255,255,255,0.8);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        }
+
+        .staff-on {
+        color: #166534;
+        }
+
+        .staff-off {
+        color: #475569;
+        }
+
+
+</style>
+
+<div style="padding: 15px;">
+    <div class="layui-card">
+        <div class="layui-card-header">用户管理</div>
+        <div class="layui-card-body">
+            
+<!-- 搜索栏 -->
+            <form class="layui-form layui-row layui-col-space10" style="margin-bottom: 20px;">
+                <!-- 医院选择 -->
+                <div class="layui-col-md3">
+                    {% if current_level < 90 %}
+                        <!-- 院管/科管/科长 只能看自己 -->
+                        <input type="text" class="layui-input" value="{{ user.hospital_name }}" disabled>
+                        <input type="hidden" name="search_hospital" value="{{ user.id_hospital }}">
+                    {% else %}
+                        <!-- SA/GA 可选 -->
+                        <select name="search_hospital" lay-filter="search_hospital">
+                            <option value="">请选择医院</option>
+                            {% for h in hospitals %}
+                                <option value="{{ h.id_hospital }}">{{ h.hospital_name }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endif %}
+                </div>
+
+                <!-- 科室选择 (修改部分) -->
+                <div class="layui-col-md3">
+                    {% if current_level < 50 %}
+                        <!-- 🔥 Level < 50 (DA/DH/PA): 锁定显示本科室，不可选择其他 -->
+                        <input type="text" class="layui-input" value="{{ user.department_name }}" disabled>
+                        <!-- 这里的 id 不设为 searchDept，防止JS加载下拉框覆盖它 -->
+                    {% else %}
+                        <!-- Level >= 50 (SA/GA/HA/HP): 可选 -->
+                        <select name="search_dept" id="searchDept">
+                            <option value="">请先选择医院</option>
+                        </select>
+                    {% endif %}
+                </div>
+
+                <div class="layui-col-md2">
+                    <button type="button" class="layui-btn layui-btn-normal" id="doSearch">
+                        <i class="layui-icon layui-icon-search"></i> 搜索
+                    </button>
+                </div>
+            </form>
+
+            <table id="userTable" lay-filter="userTable"></table>
+
+            <!-- 工具栏 -->
+            <script type="text/html" id="toolbarDemo">
+                <div class="layui-btn-container">
+                    <button class="layui-btn layui-btn-sm" lay-event="add">新增用户</button>
+                </div>
+            </script>
+            <script type="text/html" id="barDemo">
+                <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+                <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+            </script>
+        </div>
+    </div>
+</div>
+
+<!-- 用户表单 (重点改造) -->
+<div id="userForm" style="display:none;padding:20px;">
+    <form class="layui-form" lay-filter="formFilter">
+        <input type="hidden" name="id">
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">用户名</label>
+            <div class="layui-input-block">
+                <input type="text" name="username" required lay-verify="required" class="layui-input">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">密码</label>
+            <div class="layui-input-block">
+                <input type="password" name="password" placeholder="新增必填，编辑留空不改" class="layui-input">
+            </div>
+        </div>
+
+        <!-- 🔥 角色选择：改为复选框，且根据 current_level 动态显示 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">角色</label>
+                <div class="layui-input-block">
+                    {% if current_level > 90 %}
+                        <input type="checkbox" name="role_cb" value="GA" title="GA:集团管理员">
+                    {% endif %}
+                    
+                    {% if current_level > 55 %}
+                        <input type="checkbox" name="role_cb" value="HP" title="HP:院长">
+                    {% endif %}
+                    {% if current_level > 50 %}
+                        <input type="checkbox" name="role_cb" value="HA" title="HA:医院管理员">
+                    {% endif %}
+                    {% if current_level > 30 %}
+                        <input type="checkbox" name="role_cb" value="DH" title="DH:科长">
+                    {% endif %}
+                    {% if current_level > 25 %}
+                        <input type="checkbox" name="role_cb" value="DA" title="DA:科室管理员">
+                    {% endif %}
+                    {% if current_level > 20 %}
+                        <input type="checkbox" name="role_cb" value="PA" title="PA:采购管理员">
+                    {% endif %}
+                    {% if current_level > 10 %}
+                        <input type="checkbox" name="role_cb" value="SE" title="SE:受理工程师">
+                        <input type="checkbox" name="role_cb" value="ST" title="ST:普通员工">
+                    {% endif %}
+                </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">工单受理</label>
+            <div class="layui-input-block">
+                <select name="staff_flag" lay-verify="required">
+                    <option value="0">不参与</option>
+                    <option value="1">参与受理</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 医院归属 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">医院</label>
+            <div class="layui-input-block">
+                {% if current_level < 90 %}
+                    <!-- 视觉上显示名字 (disabled) -->
+                    <input type="text" class="layui-input" value="{{ user.hospital_name }}" disabled>
+                    <!-- 🔥 核心：提交时使用的ID，后端渲染默认值 -->
+                    <input type="hidden" name="id_hospital" value="{{ user.id_hospital }}">
+                {% else %}
+                    <select name="id_hospital" lay-filter="hospitalSelect" id="formHospital">
+                        <option value="">请选择医院</option>
+                        {% for h in hospitals %}
+                            <option value="{{ h.id_hospital }}">{{ h.hospital_name }}</option>
+                        {% endfor %}
+                    </select>
+                {% endif %}
+            </div>
+        </div>
+
+    <!-- 科室归属 -->
+        <div class="layui-form-item">
+            <label class="layui-form-label">科室</label>
+            <div class="layui-input-block">
+                <!-- 修改判断条件：小于 50 (即 DA/DH/PA/SE/ST) 都锁定 -->
+                {% if current_level < 50 %}
+                    <!-- 锁定展示 -->
+                    <input type="text" class="layui-input" value="{{ user.department_name }}" disabled>
+                    <!-- 🔥 核心：提交时的真实值 -->
+                    <input type="hidden" name="id_department" value="{{ user.id_department }}">
+                {% else %}
+                    <!-- 院级及以上 (>=50)：下拉选择 -->
+                    <select name="id_department" id="formDept" lay-verify="required">
+                        <option value="">请选择科室</option>
+                    </select>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="layui-form-item" style="text-align:right;">
+            <button class="layui-btn" lay-submit lay-filter="saveBtn">保存</button>
+        </div>
+    </form>
+</div>
+
+<script>
+layui.use(['table','form','layer','jquery'], function(){
+    var table = layui.table,
+        form = layui.form,
+        layer = layui.layer,
+        $ = layui.jquery;
+
+    // 后端传来的当前用户等级
+    var myLevel = {{ current_level }};
+    var currentHospital = "{{ user.id_hospital }}";
+    var currentDept = "{{ user.id_department }}";
+
+    // 辅助：加载科室
+    function loadDept(selector, hospitalId, selected){
+        var $sel = $(selector);
+        $sel.empty();
+        if(!hospitalId){
+            $sel.append('<option value="">请先选择医院</option>');
+            form.render('select');
+            return;
+        }
+        $.getJSON('/system/api/get_depts_by_hospital', { id_hospital: hospitalId }, function(res){
+            $sel.append('<option value="">请选择科室</option>');
+            if(res.code === 0 && res.data){
+                $.each(res.data, function(i, d){
+                    var s = (selected && selected == d.id_department) ? 'selected' : '';
+                    $sel.append('<option '+ s +' value="'+ d.id_department +'">'+ d.department_name +'</option>');
+                });
+            }
+            form.render('select');
+        });
+    }
+
+    // 初始化：如果是非超管，自动加载科室
+    if(myLevel < 90 && currentHospital){
+        loadDept('#searchDept', currentHospital);
+    }
+
+    form.on('select(search_hospital)', function(data){ loadDept('#searchDept', data.value); });
+    form.on('select(hospitalSelect)', function(data){ loadDept('#formDept', data.value); });
+
+    // 表格渲染
+    var tableIns = table.render({
+        elem: '#userTable',
+        url: '/system/api/user',
+        where: { id_hospital: (myLevel < 90 ? currentHospital : "") },
+        toolbar: '#toolbarDemo',
+        page: true,
+        cols: [[
+            {field:'id',title:'ID',width:60},
+            {field:'username',title:'用户名'},
+            {
+                field: 'role', title: '角色', width: 280, align: 'center',
+                templet: function (d) {
+                    if(!d.role) return '-';
+
+                    // 1. 定义角色配置：文本(t)、样式(c)、权重(p)
+                    // 权重(p)数值越大，优先级越高
+                    const roleConfig = {
+                        'SA': { t: '超级管理员', c: 'badge-red',    p: 100 },
+                        'GA': { t: '集团管理员', c: 'badge-red',    p: 90  },
+                        'HP': { t: '院长',       c: 'badge-orange', p: 55  },
+                        'HA': { t: '医院管理员', c: 'badge-orange', p: 50  },
+                        'DH': { t: '科长',       c: 'badge-green',  p: 30  },
+                        'DA': { t: '科室管理员', c: 'badge-green',  p: 25  },
+                        'PA': { t: '采购管理员', c: 'badge-green',  p: 20  },
+                        'SE': { t: '受理工程师', c: 'badge-blue',   p: 10  },
+                        'ST': { t: '员工',       c: 'badge-blue',   p: 10  }
+                    };
+
+
+                    // 2. 拆分字符串并清洗空格
+                    var userRoles = d.role.split(',').map(function(r){ return r.trim(); }).filter(function(r){ return r; });
+
+                    if(userRoles.length === 0) return '-';
+
+                    // 3. 排序：按权重降序排列 (p值大的排前面)
+                    userRoles.sort(function(a, b){
+                        var pA = roleConfig[a] ? roleConfig[a].p : 0;
+                        var pB = roleConfig[b] ? roleConfig[b].p : 0;
+                        return pB - pA; 
+                    });
+
+                    // 4. 取最高权限的一个
+                    var topRole = userRoles[0];
+                    var config = roleConfig[topRole];
+
+                    // 5. 渲染
+                    if(config) {
+                        return `<span class="role-badge ${config.c}">${config.t}</span>`;
+                    } else {
+                        // 未知角色默认显示蓝色
+                        return `<span class="role-badge badge-blue">${topRole}</span>`;
+                    }
+                }
+            },
+            {
+                field: 'staff_flag', title: '受理状态', width: 120, align: 'center',
+                templet: function(d){
+                    return String(d.staff_flag)==='1' ? 
+                        '<span class="layui-badge layui-bg-green">参与</span>' : 
+                        '<span class="layui-badge layui-bg-gray">不参与</span>';
+                }
+            },
+            {field:'hospital_name',title:'医院'},
+            {field:'department_name',title:'科室'},
+            {toolbar:'#barDemo',title:'操作',width:150}
+        ]]
+    });
+
+    $('#doSearch').click(function(){
+        tableIns.reload({
+            where:{
+                id_hospital: $('input[name="search_hospital"]').val() || $('select[name="search_hospital"]').val(),
+                id_department: $('#searchDept').val()
+            },
+            page:{curr:1}
+        });
+    });
+
+// 打开表单函数 (完整修复版)
+    function openForm(title, data){
+        // 1. 重置表单状态
+        $('form[lay-filter="formFilter"]')[0].reset(); 
+        $('input[name="id"]').val(''); // 清空隐藏的ID
+        $('input[name="role_cb"]').prop('checked', false); // 清空所有复选框
+        
+        // 如果是新增，重置下拉框提示，防止残留
+        if(!data.id) $('#formDept').html('<option value="">请选择科室</option>');
+
+        // 2. 计算正确的 id_hospital (权限注入)
+        var targetHospitalId;
+        if (myLevel < 90) {
+            // 院级/科级：强制锁定本院
+            targetHospitalId = currentHospital; 
+        } else {
+            // 超管/集团：使用数据中的医院，新增时为空
+            targetHospitalId = data.id_hospital || ""; 
+        }
+
+        // 3. 计算正确的 id_department (权限注入)
+        var targetDeptId;
+        if (myLevel < 50) {
+            // 科级 (DA/DH)：强制锁定本科室 (无论新增还是编辑)
+            targetDeptId = currentDept;
+        } else {
+            // 院级/超管：使用数据中的科室，新增时为空
+            targetDeptId = data.id_department || "";
+        }
+
+        // 4. 表单赋值 (Layui form.val)
+        // 这一步非常重要，它会将计算好的 ID 填入 type="hidden" 的 input 中
+        form.val("formFilter", {
+            "id": data.id,
+            "username": data.username,
+            "staff_flag": data.staff_flag,
+            "id_hospital": targetHospitalId,   // 赋值计算后的结果
+            "id_department": targetDeptId      // 赋值计算后的结果
+        });
+
+        // 5. 角色复选框回显
+        if(data.role){
+            var roles = data.role.split(',');
+            roles.forEach(function(r){
+                // 去除空格后选中对应的复选框
+                $('input[name="role_cb"][value="'+ r.trim() +'"]').prop('checked', true);
+            });
+        }
+
+        // 6. 渲染表单 UI (刷新复选框和下拉框状态)
+        form.render(); 
+
+        // 7. 加载科室下拉框数据
+        // 只有当确定了医院ID (targetHospitalId) 时才加载
+        if(targetHospitalId){
+            // 🔥 修复点：这里第三个参数必须传 targetDeptId
+            // 如果传 data.id_department，那么科室管理员"新增"用户时，因为 data 为空，
+            // 下拉框就不会默认选中他自己的科室。
+            loadDept('#formDept', targetHospitalId, targetDeptId);
+        }
+
+        // 8. 弹出层
+        layer.open({
+            type: 1, 
+            title: title, 
+            area: ['600px', '600px'], 
+            content: $('#userForm')
+        });
+    }
+
+    table.on('toolbar(userTable)', function(obj){
+        if(obj.event === 'add') openForm('新增用户',{});
+    });
+
+    table.on('tool(userTable)', function(obj){
+        if(obj.event === 'del'){
+            layer.confirm('确定删除？', function(index){
+                $.ajax({
+                    url: '/system/api/user', type: 'DELETE',
+                    contentType: 'application/json', data: JSON.stringify({id: obj.data.id}),
+                    success: function(res){
+                        if(res.code===0){ obj.del(); layer.close(index); layer.msg('已删除'); }
+                        else layer.msg(res.msg);
+                    }
+                });
+            });
+        } else if(obj.event === 'edit'){
+            openForm("编辑用户", obj.data);
+        }
+    });
+
+        form.on('submit(saveBtn)', function(d){
+                var field = d.field; // 获取表单字段
+
+                // 1. 校验用户名 (防止为空或仅空格)
+                if(!field.username || !field.username.trim()){
+                    layer.msg('用户名不能为空', {icon: 2, anim: 6});
+                    return false;
+                }
+
+                // 2. 🔥 校验密码 (核心逻辑：新增必填，编辑可空)
+                // field.id 为空说明是新增，此时 password 不能为空
+                if(!field.id && (!field.password || !field.password.trim())){
+                    layer.msg('新增用户时，密码不能为空', {icon: 2, anim: 6});
+                    return false;
+                }
+
+                // 3. 🔥 校验角色 (复选框手动收集 + 校验)
+                var roles = [];
+                $('input[name="role_cb"]:checked').each(function(){
+                    roles.push($(this).val());
+                });
+                
+                if(roles.length === 0){
+                    layer.msg('请至少选择一个角色', {icon: 2, anim: 6});
+                    return false;
+                }
+
+                // 4. 校验归属地 (医院/科室)
+                if(!field.id_hospital){
+                    layer.msg('请选择归属医院', {icon: 2, anim: 6});
+                    return false;
+                }
+                if(!field.id_department){
+                    layer.msg('请选择归属科室', {icon: 2, anim: 6});
+                    return false;
+                }
+
+                // 5. 校验工单受理状态
+                // 注意：staff_flag 值为 "0" 或 "1"，不能简单用 !field.staff_flag 判断，因为 "0" 是假值
+                if(field.staff_flag === "" || field.staff_flag === undefined){
+                    layer.msg('请选择是否参与工单受理', {icon: 2, anim: 6});
+                    return false;
+                }
+
+                // --- 构造提交数据 ---
+                var payload = field;
+                payload.role = roles.join(','); // 数组转字符串 "DA,SE"
+                delete payload.role_cb;         // 删除多余字段
+
+                // --- 发送请求 ---
+                $.ajax({
+                    url:'/system/api/user',
+                    type: field.id ? 'PUT' : 'POST', // 根据是否有ID判断请求方式
+                    contentType:'application/json',
+                    data:JSON.stringify(payload),
+                    success:function(res){
+                        if(res.code===0){
+                            layer.closeAll();
+                            tableIns.reload();
+                            layer.msg('保存成功', {icon: 1});
+                        }else{
+                            layer.msg(res.msg, {icon: 2});
+                        }
+                    },
+                    error: function(){
+                        layer.msg('请求失败，请检查网络', {icon: 2});
+                    }
+                });
+                return false; // 阻止表单默认提交跳转
+            });
+
+
+});
+</script>

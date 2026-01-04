@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>物资出库</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        .edit-input { height: 28px; line-height: 28px; border: 1px solid #e6e6e6; padding: 0 5px; width: 100%; box-sizing: border-box;}
+    </style>
+</head>
+<body style="padding: 15px;">
+    
+    <div class="layui-card">
+        <div class="layui-card-header">
+            <i class="layui-icon layui-icon-note"></i> 填写出库信息
+        </div>
+        <div class="layui-card-body">
+            <form class="layui-form">
+                <div class="layui-form-item">
+                    <div class="layui-inline">
+                        <label class="layui-form-label" style="width: 100px; color: red; font-weight: bold;">关联工单号</label>
+                        <div class="layui-input-inline" style="width: 300px;">
+                            <input type="text" id="workOrderId" placeholder="请扫码或输入工单号" class="layui-input" lay-verify="required">
+                        </div>
+                    </div>
+                    <div class="layui-inline">
+                        <div class="layui-input-inline">
+                            <input class="layui-input" id="searchKey" placeholder="搜索物资名称/型号/规格">
+                        </div>
+                        <button class="layui-btn layui-btn-primary" type="button" id="btnSearch">查询库存</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="layui-card" style="margin-top: 10px;">
+        <div class="layui-card-body">
+            <table class="layui-hide" id="stockTable" lay-filter="stockTable"></table>
+        </div>
+    </div>
+    
+    <!-- 底部固定提交栏 -->
+    <div style="position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; border-top: 1px solid #eee; padding: 10px 20px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); text-align: right; z-index: 999; box-sizing: border-box;">
+        <span style="float: left; line-height: 38px; color: #666; font-size: 13px;">
+            提示：请先输入工单号，再勾选物资并核对单价。
+        </span>
+        <button class="layui-btn layui-btn-lg layui-btn-danger" id="btnSubmitOut">确认出库</button>
+    </div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['table', 'layer', 'jquery'], function(){
+    var table = layui.table, layer = layui.layer, $ = layui.jquery;
+    
+    // 渲染库存表
+    var tableIns = table.render({
+        elem: '#stockTable',
+        url: '/materials/api/stock_list',
+        cols: [[
+            {type: 'checkbox'},
+            {field:'name', width:140, title: '物资名称'},
+            {field:'model', width:100, title: '型号'}, // 新增列
+            {field:'spec', width:100, title: '规格'},
+            {field:'quantity', width:90, title: '库存', style:'color: green;'},
+            {field:'unit', width:60, title: '单位'},
+            
+            // 出库单价 (默认显示库存里的成本价，可修改)
+            {field:'price', title: '出库单价(元)', width: 100, templet: function(d){
+                return '<input type="number" class="edit-input row-price" data-id="'+d.id+'" value="'+(d.price||0)+'">';
+            }},
+            
+            // 出库数量
+            {field:'out_qty', title: '出库数量', width: 100, templet: function(d){
+                return '<input type="number" class="edit-input row-qty" data-id="'+d.id+'" data-max="'+d.quantity+'" value="1">';
+            }},
+            
+            // 备注
+            {field:'remark', title: '备注', minWidth: 120, templet: function(d){
+                return '<input type="text" class="edit-input row-remark" data-id="'+d.id+'" placeholder="用途说明">';
+            }}
+        ]],
+        page: false, 
+        height: 'full-220'
+    });
+
+    $('#btnSearch').click(function(){
+        tableIns.reload({where: {keyword: $('#searchKey').val()}});
+    });
+
+    // 提交出库
+    $('#btnSubmitOut').click(function(){
+        var workId = $('#workOrderId').val();
+        if(!workId){
+            layer.msg('请填写关联工单号', {icon: 5, anim: 6});
+            $('#workOrderId').focus();
+            return;
+        }
+
+        var checkStatus = table.checkStatus('stockTable');
+        var data = checkStatus.data;
+        
+        if(data.length === 0){
+            layer.msg('请先勾选物资');
+            return;
+        }
+        
+        var outList = [];
+        var errorMsg = '';
+        
+        // 遍历处理选中行数据
+        $.each(data, function(index, item){
+            var id = item.id;
+            // 获取输入框的值
+            var $qtyInput = $('.row-qty[data-id="'+id+'"]');
+            var $priceInput = $('.row-price[data-id="'+id+'"]');
+            var $remarkInput = $('.row-remark[data-id="'+id+'"]');
+            
+            var qty = parseInt($qtyInput.val());
+            var price = parseFloat($priceInput.val());
+            var remark = $remarkInput.val();
+            var max = parseInt($qtyInput.attr('data-max'));
+            
+            if(isNaN(qty) || qty <= 0){
+                errorMsg = '【'+item.name+'】数量必须大于0'; return false;
+            }
+            if(qty > max){
+                errorMsg = '【'+item.name+'】库存不足'; return false;
+            }
+            if(isNaN(price) || price < 0){
+                errorMsg = '【'+item.name+'】单价金额不正确'; return false;
+            }
+            
+            outList.push({
+                id: id, 
+                out_qty: qty, 
+                price: price, 
+                remark: remark
+            });
+        });
+        
+        if(errorMsg){
+            layer.alert(errorMsg, {icon: 2});
+            return;
+        }
+        
+        layer.confirm('确认出库 '+outList.length+' 项物资到工单：<br><b>'+workId+'</b> ?', function(index){
+            $.ajax({
+                url: '/materials/api/stock_out',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    work_order_id: workId,
+                    items: outList
+                }),
+                success: function(res){
+                    if(res.code === 0){
+                        layer.msg('出库成功', {icon: 1, time: 1000}, function(){
+                            tableIns.reload();
+                            $('#workOrderId').val(''); // 清空工单号
+                        });
+                    } else {
+                        layer.alert(res.msg, {icon: 2});
+                    }
+                }
+            });
+            layer.close(index);
+        });
+    });
+});
+</script>
+</body>
+</html>

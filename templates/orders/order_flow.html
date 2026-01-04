@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>工单流转记录 - {{ work_id }}</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 25px; background-color: #f5f7f9; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+        .flow-container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+        
+        /* 时间轴线条颜色统一微调 */
+        .layui-timeline-item::before { background-color: #e6e6e6; }
+        .layui-timeline-axis { background-color: #fff !important; transition: all 0.3s; }
+
+        /* 节点卡片样式 */
+        .log-card {
+            background-color: #fff;
+            padding: 18px;
+            border-radius: 6px;
+            border: 1px solid #ebedf0;
+            border-left: 4px solid #ddd;
+            margin-top: -8px;
+            position: relative;
+            transition: all 0.2s;
+        }
+        .log-card:hover { border-color: #ccc; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+
+        /* 状态颜色配色 */
+        .style-start { border-left-color: #1E9FFF; color: #1E9FFF; }
+        .style-dispatch { border-left-color: #009688; color: #009688; }
+        .style-process { border-left-color: #393D49; color: #393D49; }
+        .style-outsource { border-left-color: #FFB800; color: #FFB800; }
+        .style-warn { border-left-color: #FF5722; color: #FF5722; }
+        .style-finish { border-left-color: #5FB878; color: #5FB878; }
+        .style-audit { border-left-color: #a29bfe; color: #a29bfe; }
+
+        /* 头部信息 */
+        .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .log-title { font-size: 16px; font-weight: 600; }
+        .log-time { color: #999; font-size: 13px; }
+
+        /* 内容详情 */
+        .log-content { background: #f9f9f9; padding: 12px; border-radius: 4px; color: #555; font-size: 14px; line-height: 1.6; border: 1px dashed #eee; }
+        .log-footer { margin-top: 12px; text-align: right; font-size: 13px; color: #888; }
+        .operator { color: #333; font-weight: 500; margin-left: 5px; }
+
+        /* 耗时胶囊定位 */
+        .layui-timeline-item { padding-bottom: 45px; }
+        .duration-cap {
+            position: absolute;
+            left: -48px; /* 居中于轴线 */
+            width: 100%;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            z-index: 5;
+        }
+        .duration-badge {
+            background: #fff;
+            border: 1px solid #eee;
+            color: #f60;
+            font-size: 12px;
+            padding: 2px 12px;
+            border-radius: 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* 图片列表展示 */
+        .log-photos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        .photo-thumb { 
+            width: 80px; height: 80px; border-radius: 4px; cursor: pointer; 
+            object-fit: cover; border: 1px solid #eee; transition: opacity 0.2s;
+        }
+        .photo-thumb:hover { opacity: 0.8; border-color: #1E9FFF; }
+    </style>
+</head>
+<body>
+
+<div class="flow-container">
+    <div style="margin-bottom: 25px;">
+        <span class="layui-breadcrumb">
+          <a>工单管理</a>
+          <a><cite>流转详情 ({{ work_id }})</cite></a>
+        </span>
+    </div>
+
+    <ul class="layui-timeline">
+        {% for log in logs %}
+        <li class="layui-timeline-item">
+            <!-- 动态图标逻辑 -->
+            {% set icon_class = 'layui-icon-circle-dot' %}
+            {% if log.type == 'start' %}{% set icon_class = 'layui-icon-release' %}
+            {% elif log.type == 'dispatch' %}{% set icon_class = 'layui-icon-transfer' %}
+            {% elif log.type == 'process' %}{% set icon_class = 'layui-icon-location' %}
+            {% elif log.type == 'warn' %}{% set icon_class = 'layui-icon-close-fill' %}
+            {% elif log.type == 'outsource' %}{% set icon_class = 'layui-icon-share' %}
+            {% elif log.type == 'finish' %}{% set icon_class = 'layui-icon-ok-circle' %}
+            {% elif log.type == 'audit' %}{% set icon_class = 'layui-icon-survey' %}
+            {% endif %}
+
+            <i class="layui-icon {{ icon_class }} layui-timeline-axis style-{{ log.type }}"></i>
+            
+            <div class="layui-timeline-content layui-text">
+                <div class="log-card style-{{ log.type }}">
+                    <div class="log-header">
+                        <span class="log-title">{{ log.action }}</span>
+                        <span class="log-time"><i class="layui-icon layui-icon-time"></i> {{ log.created_at }}</span>
+                    </div>
+
+                    {% if log.details %}
+                    <div class="log-content">{{ log.details }}</div>
+                    {% endif %}
+
+                    <!-- 图片展示区 -->
+                    {% if log.display_photos %}
+                    <div class="log-photos" id="gallery-{{ loop.index }}">
+                        {% for photo in log.display_photos %}
+                        <img class="photo-thumb" 
+                             src="/uploads/{{ log.photo_folder }}/{{ photo }}" 
+                             layer-src="/uploads/{{ log.photo_folder }}/{{ photo }}" 
+                             alt="图片">
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="log-footer">
+                        操作人：<span class="operator">{{ log.operator_name or '系统' }}</span>
+                    </div>
+                </div>
+
+                <!-- 耗时胶囊 -->
+                {% if log.duration_text %}
+                <div class="duration-cap">
+                    <div class="duration-badge">
+                        <i class="layui-icon layui-icon-timer"></i>
+                        等待 {{ log.duration_text }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+
+        <!-- 流程末端 -->
+        <li class="layui-timeline-item">
+            <i class="layui-icon layui-icon-circle layui-timeline-axis" style="color: #eee;"></i>
+            <div class="layui-timeline-content layui-text" style="color: #ccc; font-size: 12px; padding-top: 5px;">
+                END
+            </div>
+        </li>
+    </ul>
+
+    {% if not logs %}
+    <div style="padding: 50px; text-align: center; color: #999;">
+        <i class="layui-icon layui-icon-face-surprised" style="font-size: 40px;"></i>
+        <p>暂无流转记录</p>
+    </div>
+    {% endif %}
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['layer', 'element'], function(){
+    var layer = layui.layer;
+    
+    // 初始化所有卡片的图片预览
+    {% for log in logs %}
+        {% if log.display_photos %}
+        layer.photos({
+            photos: '#gallery-{{ loop.index }}',
+            anim: 5
+        });
+        {% endif %}
+    {% endfor %}
+});
+</script>
+</body>
+</html>

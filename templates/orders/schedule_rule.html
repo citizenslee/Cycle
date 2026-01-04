@@ -1,0 +1,145 @@
+<div class="layui-card" style="margin:15px;">
+    <div class="layui-card-header">
+        <span>班次定义管理</span>
+        <button class="layui-btn layui-btn-sm layui-btn-normal" id="btn-add" style="float:right;">
+            <i class="layui-icon">&#xe654;</i> 新增班次
+        </button>
+    </div>
+
+    <div class="layui-card-body">
+        <table id="shiftTable" lay-filter="shiftTable"></table>
+    </div>
+</div>
+
+<!-- 弹窗 form 模板 -->
+<script type="text/html" id="shiftFormTpl">
+    <form class="layui-form" lay-filter="shiftForm" style="padding:20px;">
+        <input type="hidden" name="id_shift_rule"/>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">班次名称</label>
+            <div class="layui-input-block">
+                <input type="text" name="shift_name" required class="layui-input">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">开始时间</label>
+            <div class="layui-input-inline">
+                <input type="text" name="start_time" placeholder="18:00" required class="layui-input">
+            </div>
+
+            <label class="layui-form-label">结束时间</label>
+            <div class="layui-input-inline">
+                <input type="text" name="end_time" placeholder="08:00" required class="layui-input">
+            </div>
+
+            <div class="layui-input-inline">
+                <input type="checkbox" name="next_day" title="跨次日" value="1">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <label class="layui-form-label">颜色</label>
+            <div class="layui-input-block">
+                <input type="color" name="color" class="layui-input" value="#1E9FFF">
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <button class="layui-btn" lay-submit lay-filter="saveShift">保存</button>
+        </div>
+    </form>
+</script>
+
+<script>
+layui.use(['table', 'form', 'layer', 'jquery'], function () {
+    var table = layui.table;
+    var form = layui.form;
+    var layer = layui.layer;
+    var $ = layui.jquery;
+
+    // 表格
+    table.render({
+        elem: '#shiftTable',
+        url: '/shift_rule/list', // Flask 返回 shift_rule 列表
+        page: false,
+        cols: [[
+            {field: 'shift_name', title: '班次名称', width: 160},
+            {field: 'start_time', title: '开始'},
+            {field: 'end_time', title: '结束'},
+            {
+                field: 'next_day',
+                title: '跨次日',
+                width: 80,
+                templet: d => d.next_day == 1 ? '是' : '否'
+            },
+            {
+                field: 'color',
+                title: '颜色',
+                templet: d => `<div style="width:30px;height:20px;background:${d.color};"></div>`
+            },
+            {
+                fixed: 'right',
+                title: '操作',
+                width: 150,
+                templet: d => `
+                    <button class="layui-btn layui-btn-xs" onclick="editShift(${d.id_shift_rule})">编辑</button>
+                    <button class="layui-btn layui-btn-danger layui-btn-xs" onclick="delShift(${d.id_shift_rule})">删除</button>
+                `
+            }
+        ]]
+    });
+
+    // 新增
+    $("#btn-add").click(function () {
+        openForm();
+    });
+
+    // 编辑
+    window.editShift = function (id) {
+        $.get('/shift_rule/get/' + id, function (res) {
+            openForm(res.data);
+        });
+    };
+
+    // 删除
+    window.delShift = function (id) {
+        layer.confirm("确认删除此班次？", function () {
+            $.post('/shift_rule/delete', {id: id}, function (res) {
+                layer.msg(res.msg);
+                table.reload("shiftTable");
+
+                // 主页面需要刷新 shift_rule
+                window.parent.refreshShiftRules(res.shift_rules);
+            });
+        });
+    };
+
+    // 打开表单
+    function openForm(data = {}) {
+        var index = layer.open({
+            type: 1,
+            shadeClose: true,
+            area: ['420px', '400px'],
+            title: data.id_shift_rule ? "编辑班次" : "新增班次",
+            content: $("#shiftFormTpl").html()
+        });
+
+        form.val("shiftForm", data);
+
+        form.on("submit(saveShift)", function (formData) {
+            $.post('/shift_rule/save', formData.field, function (res) {
+                layer.msg(res.msg);
+                layer.close(index);
+                table.reload("shiftTable");
+
+                // 主排班页刷新 shift rule
+                window.parent.refreshShiftRules(res.shift_rules);
+            });
+            return false;
+        });
+    }
+});
+
+</script>

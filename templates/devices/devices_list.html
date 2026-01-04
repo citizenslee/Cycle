@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>设备设施综合管理</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 15px; background: #f2f2f2; }
+        .tree-icon { cursor: pointer; width: 20px; text-align: center; margin-right: 5px; color: #666; }
+        .tree-icon:hover { color: #009688; }
+        .leaf { color: #ccc; cursor: default; }
+        .layui-form-select { width: 180px; }
+        .layui-table tbody tr { transition: background-color 0.2s; }
+        .layui-table tbody tr:hover { background-color: #e6f7ff !important; }
+        .tree-node { cursor: pointer; }
+        
+        /* 事件卡片样式 */
+        #eventListContainer { background-color: #f8f8f8; padding: 10px; }
+        .event-item-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border: 1px solid #eee; position: relative; overflow: hidden; transition: all 0.3s; }
+        .event-item-card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
+        .event-card-strip { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; }
+        .card-header { padding: 10px 15px; border-bottom: 1px solid #f6f6f6; display: flex; justify-content: space-between; align-items: center; }
+        .card-type-badge { font-size: 12px; padding: 2px 8px; border-radius: 4px; color: #fff; margin-right: 8px; }
+        .card-body { padding: 12px 15px; color: #333; font-size: 14px; line-height: 1.6; }
+        .card-footer { padding: 8px 15px; background: #fafafa; border-top: 1px solid #f0f0f0; font-size: 12px; color: #888; display: flex; justify-content: space-between; }
+        .footer-item { display: flex; align-items: center; gap: 5px; }
+        .bg-blue { background-color: #1E9FFF; } .bg-green { background-color: #009688; } .bg-orange { background-color: #FFB800; } .bg-red { background-color: #FF5722; }
+    </style>
+</head>
+<body>
+<div class="layui-card">
+    <div class="layui-card-header">设备设施综合管理</div>
+    <div class="layui-card-body">
+        
+        <!-- === 综合工具栏 === -->
+        <div class="layui-form" style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+            
+            <!-- 1. 医院选择 -->
+            {% if current_level < 90 %}
+                <!-- 院管/科管：锁定本院 -->
+                <input type="text" class="layui-input" value="{{ user.hospital_name }}" disabled style="width: 180px;">
+                <input type="hidden" id="search_hospital" value="{{ user.id_hospital }}">
+            {% else %}
+                <!-- 超管：下拉选择 -->
+                <select id="search_hospital" lay-filter="hospital_select">
+                    <option value="">请选择医院</option>
+                    {% for h in hospitals %}
+                    <option value="{{ h.id_hospital }}">{{ h.hospital_name }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+
+            <!-- 2. 科室选择 -->
+            {% if current_level < 50 %}
+                <!-- 科管/科长：锁定本科室 -->
+                <input type="text" class="layui-input" value="{{ user.department_name }}" disabled style="width: 180px;">
+                <input type="hidden" id="search_dept" value="{{ user.id_department }}">
+            {% else %}
+                <!-- 院管/超管：下拉选择 -->
+                <select id="search_dept" lay-filter="dept_select">
+                    <option value="">请选择科室</option>
+                    {% for d in departments %}
+                    <option value="{{ d.id_department }}">{{ d.department_name }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+
+            <!-- 搜索 -->
+            <input type="text" id="keyword" placeholder="搜索名称或型号" class="layui-input" style="width: 200px;">
+            
+            <button class="layui-btn layui-btn-normal" onclick="doSearch()">查询</button>
+            <button class="layui-btn layui-btn-primary" onclick="resetTree()">重置</button>
+            
+            <!-- 新增顶级 (仅管理员/院管) -->
+            {% if current_level >= 50 %}
+            <button class="layui-btn" onclick="openAdd(0)">新增顶级设备</button>
+            {% endif %}
+        </div>
+        
+        <!-- 设备树表格 -->
+        <table class="layui-table">
+            <thead>
+                <tr>
+                    <th>设备名称</th>
+                    <th>ID</th>
+                    <th>型号</th>
+                    <th>所属医院</th> 
+                    <th>管理科室</th>
+                    <th>使用科室</th>
+                    <th width="420">操作</th>
+                </tr>
+            </thead>
+            <tbody id="treeBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ======================================================= -->
+<!--                  模板区域 (保持不变)                      -->
+<!-- ======================================================= -->
+<script type="text/html" id="tplEventManager">
+    <div style="padding: 15px;">
+        <div style="margin-bottom: 10px; text-align: right;">
+            <button class="layui-btn layui-btn-sm" id="btnAddEvent">
+                <i class="layui-icon layui-icon-add-1"></i> 添加新规则
+            </button>
+        </div>
+        <div id="eventListContainer" style="max-height: 450px; overflow-y: auto;">
+            <div style="text-align:center; padding: 20px; color:#ccc;">加载中...</div>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" id="tplEventForm">
+    <form class="layui-form" style="padding: 20px;" lay-filter="evtForm">
+        <input type="hidden" name="id">
+        <input type="hidden" name="device_id">
+        <div class="layui-form-item">
+            <label class="layui-form-label">事件类型</label>
+            <div class="layui-input-block">
+                <select name="event_type" lay-verify="required">
+                    <option value="巡检">巡检</option>
+                    <option value="操作">操作</option>
+                    <option value="维护">维护</option>
+                    <option value="保养">保养</option>
+                    <option value="检验">检验</option>
+                </select>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">事件内容</label>
+            <div class="layui-input-block">
+                <textarea name="content" class="layui-textarea" placeholder="填写事件详细描述..."></textarea>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <div class="layui-inline">
+                <label class="layui-form-label">执行周期</label>
+                <div class="layui-input-inline" style="width: 80px;">
+                    <input type="number" name="cycle_val" class="layui-input" placeholder="数值">
+                </div>
+                <div class="layui-input-inline" style="width: 80px;">
+                    <select name="cycle_unit">
+                        <option value="hour">小时</option>
+                        <option value="day">天</option>
+                        <option value="month">月</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">下次执行</label>
+            <div class="layui-input-block">
+                <input type="text" name="next_run_time" id="date_next_time" class="layui-input" placeholder="请选择时间">
+            </div>
+        </div>
+        <div class="layui-form-item" style="text-align: right; margin-top: 30px;">
+            <button class="layui-btn" lay-submit lay-filter="saveEvent">保存提交</button>
+        </div>
+    </form>
+</script>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['layer', 'jquery', 'form', 'laytpl', 'laydate'], function(){
+    var $ = layui.jquery, 
+        layer = layui.layer, 
+        form = layui.form,
+        laytpl = layui.laytpl,
+        laydate = layui.laydate;
+    window.$ = $; 
+
+    // 后端传参
+    var myLevel = {{ current_level }};
+    var myDeptId = "{{ user.id_department }}";
+    var myHospId = "{{ user.id_hospital }}";
+
+    $(function() { loadNodes(0, 0, null); });
+
+    // === 医院-科室联动 (仅当下拉框存在时有效) ===
+    form.on('select(hospital_select)', function(data){
+        var hospitalId = data.value;
+        var $deptSelect = $('#search_dept');
+        // 如果页面上 search_dept 是 input 类型（被锁定了），则不会触发后续逻辑
+        if ($deptSelect.prop('tagName') !== 'SELECT') return;
+
+        if (!hospitalId) {
+            $deptSelect.html('<option value="">请选择科室</option>');
+            form.render('select');
+            return;
+        }
+        $.get('/system/api/get_depts_by_hospitals', { id_hospital: hospitalId }, function(res) {
+            if (res.code === 0) {
+                var html = '<option value="">请选择科室</option>';
+                $.each(res.data, function(i, item) {
+                    html += `<option value="${item.id_department}">${item.department_name}</option>`;
+                });
+                $deptSelect.html(html);
+                form.render('select');
+            } else {
+                layer.msg(res.msg || '获取科室失败');
+            }
+        });
+    });
+
+    // =================================================================
+    // 核心逻辑：加载节点并生成操作按钮
+    // =================================================================
+    window.loadNodes = function(pid, level, $afterRow) {
+        // 🔥 统一使用 #id 获取值，无论是 hidden 还是 select 都能取到
+        var params = {
+            parent_id: pid,
+            id_hospital: $('#search_hospital').val(),
+            id_department: $('#search_dept').val(),
+            keyword: $afterRow ? '' : $('#keyword').val() 
+        };
+
+        $.get('/devices/api/tree_list', params, function(res) {
+            if(res.code !== 0) return layer.msg(res.msg);
+            var data = res.data;
+
+            if(data.length === 0) {
+                if(pid === 0) $('#treeBody').html('<tr><td colspan="7" align="center">无数据</td></tr>');
+                else if($afterRow) {
+                    $afterRow.find('.tree-icon').addClass('layui-icon-file leaf').removeClass('layui-icon-triangle-r');
+                    $afterRow.attr('data-has-child', 'false');
+                }
+                return;
+            }
+
+            var html = '';
+            $.each(data, function(i, item) {
+                var padding = level * 25;
+                var btnHtml = '';
+
+                // --- 权限判断逻辑 START ---
+                var hasManagePerm = false;
+                
+                // 1. 判断管理权限 (用于编辑、删除、配置事件)
+                // 路径节点(_is_structure_path=True)通常只读，除非你是超管且真的想改它
+                if (!item._is_structure_path) {
+                    if (myLevel >= 90) { 
+                        // 超管/集团：拥有所有权限
+                        hasManagePerm = true; 
+                    } else if (myLevel >= 50 && String(item.id_hospital) === String(myHospId)) {
+                        // 院管：拥有本院设备权限
+                        hasManagePerm = true;
+                    } else if (String(item.id_department) === String(myDeptId)) {
+                        // 科管/科长：拥有管理科室为本科室的设备权限
+                        hasManagePerm = true; 
+                    }
+                }
+
+                // 2. 判断添加子级权限
+                var canAddChild = false;
+                if (hasManagePerm) {
+                    // 有管理权通常就有添加权
+                    canAddChild = true;
+                } else if (String(item.use_department_id) === String(myDeptId) && myLevel >= 10) {
+                    // 使用科室的人员，也允许添加下级设备 (例如在某个房间下添加设备)
+                    // 前提是：不能是最低级的访客，至少是 ST(10)
+                    canAddChild = true;
+                }
+
+                // --- 按钮生成 START ---
+
+                // [按钮1] 编辑
+                if (hasManagePerm) {
+                    btnHtml += `<a class="layui-btn layui-btn-xs" onclick="openEdit(${item.id})">编辑</a>`;
+                } else {
+                    btnHtml += `<a class="layui-btn layui-btn-xs layui-btn-disabled">只读</a>`;
+                }
+
+                // [按钮2] 加子级
+                if (canAddChild) {
+                    btnHtml += `<a class="layui-btn layui-btn-warm layui-btn-xs" onclick="openAdd(${item.id}, ${item.id_hospital})">添加子级</a>`;
+                }
+
+                // [按钮3] 自动事件 (Plan)
+                if (hasManagePerm && !item._is_structure_path) {
+                    btnHtml += `<a class="layui-btn layui-btn-normal layui-btn-xs" onclick="openEventManager('${item.id}', '${item.name}')">计划</a>`;
+                }
+
+                // [按钮4] 全生命周期 (History)
+                btnHtml += `<a class="layui-btn layui-btn-primary layui-btn-xs" onclick="openHistory(${item.id})">记录</a>`;
+                
+                // --- TR 生成 ---
+                html += `
+                    <tr class="tree-node parent-${pid}" data-id="${item.id}" data-loaded="false"
+                        onclick="$(this).find('.tree-icon').click()" 
+                        style="cursor: pointer;"
+                        title="双击展开/折叠">
+                        
+                        <td style="padding-left: ${10+padding}px">
+                            <i class="layui-icon layui-icon-triangle-r tree-icon" 
+                               onclick="toggleChild(this, ${item.id}, ${level}); event.stopPropagation();"></i>
+                            ${item.name}
+                        </td>
+                        <td>${item.id}</td>
+                        <td>${item.model||''}</td>
+                        <td>${item.hospital_name||''}</td>
+                        <td>${item.department_name||''}</td>
+                        <td>${item.use_department_name||''}</td>
+                        <td>
+                            <div class="layui-btn-group" onclick="event.stopPropagation()">
+                                ${btnHtml}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            if(pid === 0) $('#treeBody').html(html);
+            else $afterRow.after(html);
+        });
+    };
+
+    // 节点展开折叠
+    window.toggleChild = function(icon, id, level) {
+        var $tr = $(icon).closest('tr');
+        if($tr.attr('data-has-child') === 'false') return;
+
+        if($(icon).hasClass('layui-icon-triangle-d')) {
+            $(icon).removeClass('layui-icon-triangle-d').addClass('layui-icon-triangle-r');
+            $('tr[class*="parent-'+id+'"]').remove();
+            $tr.attr('data-loaded', 'false');
+        } else {
+            $(icon).removeClass('layui-icon-triangle-r').addClass('layui-icon-triangle-d');
+            loadNodes(id, level+1, $tr);
+        }
+    };
+
+    // =================================================================
+    // 弹窗操作 (Add, Edit, History)
+    // =================================================================
+
+    window.openAdd = function(pid, pHid) {
+        // 如果是添加顶级，pHid 可能未传，取当前搜索栏的值
+        var h = pHid || $('#search_hospital').val(); 
+        
+        // 构建弹窗 URL
+        var url = `/devices/device_form?parent_id=${pid}&default_hospital=${h}`;
+
+        // 如果不是添加顶级，先查父节点路径做标题展示
+        if (pid !== 0) {
+            var loadIndex = layer.load(2);
+            $.get('/devices/api/get_node_path', {id: pid}, function(res) {
+                layer.close(loadIndex);
+                var pathStr = res.code === 0 ? res.data : '未知路径';
+                var titleHtml = `
+                    <div style="line-height:22px; padding-top:5px;">
+                        <div style="font-size:16px;">新增子级</div>
+                        <div style="font-size:12px; color:#FF5722; font-weight:normal;">父路径: ${pathStr}</div>
+                    </div>`;
+                layer.open({
+                    type: 2, title: [titleHtml, 'height: 55px; padding:0 20px;'], area: ['800px', '650px'],
+                    content: url,
+                    end: function() { loadNodes(0, 0, null); }
+                });
+            });
+        } else {
+            layer.open({
+                type: 2, title: '新增顶级设备', area: ['800px', '650px'],
+                content: url,
+                end: function() { loadNodes(0, 0, null); }
+            });
+        }
+    };
+
+window.openEdit = function(id) {
+        // 1. 显示加载层，因为需要先请求接口
+        var loadIndex = layer.load(2);
+
+        // 2. 请求获取当前节点的路径
+        $.get('/devices/api/get_node_path', {id: id}, function(res) {
+            layer.close(loadIndex); // 关闭加载层
+            
+            var pathStr = res.code === 0 ? res.data : '未知路径';
+            
+            // 3. 构造自定义标题 HTML (参考 openAdd 的样式)
+            // 这里为了区分，可以将 subtitle 的颜色设为蓝色(#1E9FFF)或墨绿(#009688)，或者保持与新增一样的橙色(#FF5722)
+            var titleHtml = `
+                <div style="line-height:22px; padding-top:5px;">
+                    <div style="font-size:16px;">编辑设备</div>
+                    <div style="font-size:12px; color:#009688; font-weight:normal;">设备路径: ${pathStr}</div>
+                </div>`;
+
+            // 4. 打开弹窗
+            layer.open({
+                type: 2, 
+                // 使用数组格式定义标题：[HTML内容, 'CSS样式']
+                title: [titleHtml, 'height: 55px; padding:0 20px;'], 
+                area: ['800px', '650px'],
+                content: `/devices/device_form?id=${id}`,
+                // 窗口关闭后刷新列表
+                end: function() { loadNodes(0, 0, null); } 
+            });
+        });
+    };
+
+    window.openHistory = function(id) {
+        var loadIndex = layer.load(2);
+        $.get('/devices/api/get_node_path', {id: id}, function(res) {
+            layer.close(loadIndex);
+            var pathStr = res.code === 0 ? res.data : '未知路径';
+            var titleHtml = `
+                <div style="line-height:22px; padding-top:5px;">
+                    <div style="font-size:16px;">全生命周期记录</div>
+                    <div style="font-size:12px; color:#1E9FFF; font-weight:normal;">当前查看: ${pathStr}</div>
+                </div>`;
+            layer.open({
+                type: 2, title: [titleHtml, 'height: 55px; padding:0 20px;'], 
+                shadeClose: true, shade: 0.3, maxmin: true, area: ['900px', '600px'], 
+                content: `/devices/log_list?device_id=${id}`
+            });
+        });
+    };
+
+    // =================================================================
+    // 事件规则管理逻辑 (移植自 devices_events_card.html)
+    // =================================================================
+
+    window.openEventManager = function(deviceId, deviceName) {
+        var loadIndex = layer.load(2);
+        $.get('/devices/api/get_node_path', {id: deviceId}, function(res) {
+            layer.close(loadIndex);
+            var pathStr = res.code === 0 ? res.data : '未知路径';
+            var titleHtml = `
+                <div style="line-height:22px; padding-top:5px;">
+                    <div style="font-size:16px;">自动触发规则配置 - ${deviceName}</div>
+                    <div style="font-size:12px; color:#FF5722; font-weight:normal;">设备路径: ${pathStr}</div>
+                </div>`;
+
+            layer.open({
+                type: 1, title: [titleHtml, 'height: 55px; padding:0 20px;'], area: ['700px', '600px'],
+                content: $('#tplEventManager').html(),
+                success: function(layero, index) {
+                    layero.find('#btnAddEvent').click(function(){ openEventForm(deviceId, null); });
+                    loadEventList(deviceId, layero.find('#eventListContainer'));
+                }
+            });
+        });
+    };
+
+    function getTypeClass(type) { return { '巡检': 'bg-green', '维护': 'bg-orange', '保养': 'layui-bg-purple','检验': 'bg-red' }[type] || 'bg-blue'; }
+    function formatUnit(u) { return { 'hour': '小时', 'day': '天', 'month': '月' }[u] || u; }
+
+    function loadEventList(deviceId, $container) {
+        $container.html('<div style="text-align:center; padding:30px;"><i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop" style="font-size:30px; color:#1E9FFF;"></i></div>');
+        $.get('/devices/api/event_list', {device_id: deviceId}, function(res) {
+            if(res.code !== 0) return $container.html('<div style="padding:10px; color:red;">'+res.msg+'</div>');
+            if(res.data.length === 0) return $container.html('<div style="text-align:center; padding:50px; color:#ccc;">暂无自动规则</div>');
+            
+            var html = '';
+            $.each(res.data, function(i, item) {
+                var colorClass = getTypeClass(item.event_type);
+                var cycleHtml = item.cycle_val > 0 
+                    ? `<span class="footer-item" title="周期"><i class="layui-icon layui-icon-refresh"></i> 每 ${item.cycle_val} ${formatUnit(item.cycle_unit)}</span>` 
+                    : '<span class="footer-item">单次任务</span>';
+                var nextHtml = item.next_run_time 
+                    ? `<span class="footer-item"><i class="layui-icon layui-icon-date"></i> ${item.next_run_time}</span>` 
+                    : '';
+                // 将 item 序列化存入 onclick
+                var itemJson = JSON.stringify(item).replace(/"/g, '&quot;');
+
+                html += `
+                    <div class="event-item-card">
+                        <div class="event-card-strip ${colorClass}"></div>
+                        <div class="card-header">
+                            <div><span class="card-type-badge ${colorClass}">${item.event_type}</span></div>
+                            <div class="layui-btn-group">
+                                <button class="layui-btn layui-btn-primary layui-btn-sm" style="border:none;" onclick="editEvent(${itemJson})"><i class="layui-icon layui-icon-edit" style="color:#009688;"></i></button>
+                                <button class="layui-btn layui-btn-primary layui-btn-sm" style="border:none;" onclick="delEvent(${item.id}, ${deviceId})"><i class="layui-icon layui-icon-delete" style="color:#FF5722;"></i></button>
+                            </div>
+                        </div>
+                        <div class="card-body">${item.content || '无内容'}</div>
+                        <div class="card-footer">${cycleHtml}${nextHtml}</div>
+                    </div>`;
+            });
+            $container.html(html);
+        });
+    }
+
+    window.openEventForm = function(deviceId, eventData) {
+        var title = eventData ? '编辑规则' : '添加规则';
+        layer.open({
+            type: 1, title: title, area: ['500px', '550px'],
+            content: $('#tplEventForm').html(),
+            success: function(layero, index) {
+                form.render(null, 'evtForm');
+                laydate.render({ elem: layero.find('#date_next_time')[0], type: 'datetime' });
+
+                if(eventData) form.val('evtForm', eventData);
+                else {
+                    layero.find('input[name="device_id"]').val(deviceId);
+                    layero.find('#date_next_time').val(layui.util.toDateString(new Date(), 'yyyy-MM-dd HH:mm:ss'));
+                }
+
+                form.on('submit(saveEvent)', function(data){
+                    $.post('/devices/api/event_save', data.field, function(res){
+                        if(res.code === 0) {
+                            layer.msg('保存成功');
+                            layer.close(index);
+                            loadEventList(deviceId, $('#eventListContainer'));
+                        } else {
+                            layer.msg(res.msg, {icon: 2});
+                        }
+                    });
+                    return false;
+                });
+            }
+        });
+    };
+
+    window.editEvent = function(item) { openEventForm(item.device_id, item); };
+    window.delEvent = function(id, deviceId) {
+        layer.confirm('确定删除该规则吗？', function(idx){
+            $.post('/devices/api/event_delete', {id: id}, function(res){
+                layer.close(idx);
+                if(res.code === 0) {
+                    layer.msg('已删除');
+                    loadEventList(deviceId, $('#eventListContainer'));
+                } else {
+                    layer.msg(res.msg);
+                }
+            });
+        });
+    };
+
+    // 搜索与重置
+    window.doSearch = function() { loadNodes(0, 0, null); };
+    window.resetTree = function() { window.location.reload(); };
+});
+</script>
+</body>
+</html>

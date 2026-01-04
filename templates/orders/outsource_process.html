@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>委外派单处理</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 20px; background-color: #fff; }
+        .order-summary {
+            background-color: #f8f9fa;
+            border-left: 5px solid #009688;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            border-radius: 2px;
+            color: #555;
+            font-size: 13px;
+        }
+        .order-summary p { margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="layui-fluid">
+    <!-- 工单简要信息展示 -->
+    <div class="order-summary">
+        <p><strong>工单单号：</strong> {{ order.id }}</p>
+        <p><strong>发起时间：</strong> {{ order.created_at }}</p>        
+        <p><strong>发起科室：</strong> {{ order.created_department_name }}</p>
+        <p><strong>受理科室：</strong> {{ order.created_department_name }} </p>
+        <p><strong>故障描述：</strong> {{ order.demand }}</p>
+    </div>
+
+    <form class="layui-form" lay-filter="outsourceForm">
+        <!-- 隐藏域提交工单ID -->
+        <input type="hidden" name="order_id" value="{{ order.id }}">
+
+        <div class="layui-form-item">
+            <label class="layui-form-label required">选择单位</label>
+            <div class="layui-input-block">
+                <!-- 开启 lay-search 可支持搜索 -->
+                <select name="unit_id" lay-verify="required" lay-search>
+                    <option value="">请搜索或选择委外单位</option>
+                    {% for unit in units %}
+                    <option value="{{ unit.id }}">{{ unit.unit_name }} ({{ unit.unit_desc }})</option>
+                    {% endfor %}
+                </select>
+                {% if not units %}
+                <div class="layui-form-mid layui-word-aux" style="color: #FF5722!important;">
+                    <i class="layui-icon layui-icon-tips"></i> 您所在科室暂无启用的委外单位
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="layui-form-item layui-form-text">
+            <label class="layui-form-label required">派单备注</label>
+            <div class="layui-input-block">
+                <textarea name="notes" class="layui-textarea" lay-verify="required" placeholder="请输入派单说明（如：联系人电话、需携带工具、初步判断等），这将作为初始工作内容记录。"></textarea>
+            </div>
+        </div>
+
+        <div class="layui-form-item">
+            <div class="layui-input-block">
+                <button class="layui-btn layui-btn-normal" lay-submit lay-filter="saveBtn">确认派单</button>
+                <button type="button" class="layui-btn layui-btn-primary" id="closeBtn">取消</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+    layui.use(['form', 'layer'], function () {
+        var form = layui.form,
+            layer = layui.layer,
+            $ = layui.jquery;
+
+        // 监听提交
+        form.on('submit(saveBtn)', function (data) {
+            var btn = $(data.elem);
+            // 防止重复提交
+            btn.addClass('layui-btn-disabled').attr('disabled', true).html('<i class="layui-icon layui-icon-loading layui-anim layui-anim-rotate layui-anim-loop"></i> 处理中');
+
+            $.ajax({
+                url: '/orders/api/outsource/confirm',
+                type: 'POST',
+                data: data.field,
+                success: function (res) {
+                    if (res.code === 0) {
+                        layer.msg('委外派单成功', {icon: 1, time: 1000}, function () {
+                            // 1. 关闭当前弹窗
+                            var iframeIndex = parent.layer.getFrameIndex(window.name);
+                            parent.layer.close(iframeIndex);
+                            
+                            // 2. 刷新父页面的表格 (假设父页面表格ID为 currentTableId)
+                            if(parent.layui.table){
+                                parent.layui.table.reload('currentTableId'); 
+                            } else {
+                                parent.location.reload();
+                            }
+                        });
+                    } else {
+                        layer.msg(res.msg, {icon: 2});
+                        btn.removeClass('layui-btn-disabled').removeAttr('disabled').text('确认派单');
+                    }
+                },
+                error: function() {
+                    layer.msg('网络请求失败', {icon: 2});
+                    btn.removeClass('layui-btn-disabled').removeAttr('disabled').text('确认派单');
+                }
+            });
+            return false;
+        });
+
+        // 关闭按钮
+        $('#closeBtn').click(function(){
+            var iframeIndex = parent.layer.getFrameIndex(window.name);
+            parent.layer.close(iframeIndex);
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!-- schedule/_calendar_grid.html -->
+{% for week in cal_matrix %}
+    {% for day in week %}
+        {% if day == 0 %}
+            <!-- 空白格子 -->
+            <div class="cal-cell empty"></div>
+        {% else %}
+            <!-- 日期 Key -->
+            {% set date_str = '%04d-%02d-%02d' % (year, month, day) %}
+            
+            <!-- 获取当天的异常配置 (节假日/工作日) -->
+            {% set exception = exception_map.get(date_str) %}
+            
+            <div class="cal-cell">
+                <!-- 1. 日期头部区域 -->
+                <div class="day-header">
+                    <!-- 日期数字 (判断是否是今天可选) -->
+                    <div class="day-num">{{ day }}</div>
+                    
+                    <!-- 节假日角标 -->
+                    {% if exception %}
+                        {% if exception.type == 'HOLIDAY' %}
+                            <span class="date-tag holiday">休</span>
+                        {% elif exception.type == 'WORKDAY' %}
+                            <span class="date-tag workday">班</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+
+                <!-- 2. 节日备注 (如: 端午节) -->
+                {% if exception and exception.note %}
+                    <div class="holiday-note" style="color: {{ '#ef4444' if exception.type=='HOLIDAY' else '#16a34a' }}">
+                        {{ exception.note }}
+                    </div>
+                {% endif %}
+
+                <!-- 3. 班次列表 -->
+                {% if date_str in data_map %}
+                    {% for shift_id, info in data_map[date_str].items() %}
+                        
+                        <!-- 班次块 -->
+                        <!-- 样式技巧：利用 hex 颜色加透明度做背景 -->
+                        <div class="shift-item" 
+                             style="border-left-color: {{ info.color }}; background-color: {{ info.color }}10;"
+                             data-date="{{ date_str }}"
+                             data-shiftid="{{ shift_id }}"
+                             data-shiftname="{{ info.shift_name }}"
+                             data-users='{{ info.users | tojson | safe }}'>
+                            
+                            <!-- 班次名 + 时间 -->
+                            <div class="shift-header" style="color: {{ info.color }};">
+                                <span>{{ info.shift_name }}</span>
+                                <span class="shift-time">{{ info.time }}</span>
+                            </div>
+                            
+                            <!-- 人员名单 -->
+                            <div class="shift-users">
+                                <i class="layui-icon layui-icon-username" style="font-size: 10px; opacity: 0.5;"></i>
+                                {% for u in info.users %}
+                                    {{ u.name }}{{ "," if not loop.last else "" }}
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                    {% endfor %}
+                {% endif %}
+            </div>
+        {% endif %}
+    {% endfor %}
+{% endfor %}

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>设备信息表单</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 25px; background-color: #fff; }
+        .ex-row { margin-top: 8px; display: flex; gap: 10px; align-items: center; }
+        .ex-row .k { width: 140px; text-align: right; background-color: #fcfcfc; }
+        .ex-row .v { flex: 1; }
+        .required-star { color: #ff5722; margin-right: 4px; font-weight: bold; font-size: 14px; }
+        .layui-form-label { width: 90px; }
+        .layui-input-block { margin-left: 120px; }
+        .tips-text { color: #999; font-size: 12px; margin-top: 4px; display: block;}
+    </style>
+</head>
+<body>
+
+<form class="layui-form" lay-filter="formFilter">
+    <!-- 隐藏核心字段 -->
+    <input type="hidden" name="id" value="{{ obj.id }}">
+    <input type="hidden" name="parent_id" value="{{ obj.parent_id }}">
+
+    <!-- 1. 设备名称 -->
+    <div class="layui-form-item">
+        <label class="layui-form-label"><span class="required-star">*</span>设备名称</label>
+        <div class="layui-input-block">
+            <input type="text" name="name" value="{{ obj.name }}" class="layui-input" lay-verify="required" placeholder="请输入设备设施名称">
+        </div>
+    </div>
+
+    <!-- 2. 类别 (使用 datalist 实现可选可填) -->
+    <div class="layui-form-item">
+        <label class="layui-form-label"><span class="required-star">*</span>设备类别</label>
+        <div class="layui-input-block">
+            <input type="text" name="category" value="{{ obj.category or '' }}" list="category_options" class="layui-input" lay-verify="required" placeholder="选择或输入类别">
+            <datalist id="category_options">
+                <option value="系统">
+                <option value="设备">
+                <option value="部件">
+                <option value="设施">
+                <option value="区域">
+                <option value="建筑">
+                <option value="配件">
+                <option value="工具">
+            </datalist>
+        </div>
+    </div>
+
+    <!-- 3. 规格型号 -->
+    <div class="layui-form-item">
+        <label class="layui-form-label">规格型号</label>
+        <div class="layui-input-block">
+            <input type="text" name="model" value="{{ obj.model or '' }}" class="layui-input" placeholder="请输入品牌或型号">
+        </div>
+    </div>
+    
+    <!-- 4. 所属医院 (逻辑：有父级必须锁死，规则锁定也要锁死) -->
+    <div class="layui-form-item">
+        <label class="layui-form-label"><span class="required-star">*</span>所属医院</label>
+        <div class="layui-input-block">
+            {% set hospital_disabled = rules.lock_hospital or (obj.parent_id|int > 0) %}
+            
+            <select name="id_hospital" lay-filter="hosp" lay-verify="required" {% if hospital_disabled %}disabled{% endif %}>
+                <option value="">请选择医院</option>       
+                {% for h in rules.hospital_list %}
+                <option value="{{ h.id_hospital }}" {% if obj.id_hospital|string == h.id_hospital|string %}selected{% endif %}>
+                    {{ h.hospital_name }}
+                </option>
+                {% endfor %}
+            </select>
+            
+            <!-- 核心：如果禁用，必须手动添加 hidden input 传值 -->
+            {% if hospital_disabled %}
+            <input type="hidden" name="id_hospital" value="{{ obj.id_hospital }}">
+            {% endif %}
+            
+            {% if obj.parent_id|int > 0 %}
+            <span class="tips-text"><i class="layui-icon layui-icon-tips"></i> 子设备必须归属同一医院</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 5. 管理科室 -->
+    <div class="layui-form-item">
+        <label class="layui-form-label"><span class="required-star">*</span>管理科室</label>
+        <div class="layui-input-block">
+            <select name="id_department" id="mgmt" lay-search lay-verify="required" {% if rules.lock_mgmt %}disabled{% endif %}>
+                <option value="">请选择管理科室</option>
+                {% for d in rules.dept_list %}
+                <option value="{{ d.id_department }}" {% if obj.id_department|string == d.id_department|string %}selected{% endif %}>
+                    {{ d.department_name }}
+                </option>
+                {% endfor %}
+            </select>
+            {% if rules.lock_mgmt %}
+            <input type="hidden" name="id_department" value="{{ obj.id_department }}">
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 6. 使用科室 -->
+    <div class="layui-form-item">
+        <label class="layui-form-label"><span class="required-star">*</span>使用科室</label>
+        <div class="layui-input-block">
+            <select name="use_department_id" id="use" lay-search lay-verify="required" {% if rules.lock_use %}disabled{% endif %}>
+                <option value="">请选择使用科室</option>
+                
+                <!-- 【权限适配】全院通用选项：Level >= 50 (院管/超管) 或 职能科室(Flag=1) 可见 -->
+                {% if (user.current_level|int >= 50) or (user.work_flag|int == 1) %}
+                <option value="0" {% if obj.use_department_id|string == '0' %}selected{% endif %}>全院通用</option>
+                {% endif %}
+                
+                {% for d in rules.dept_list %}
+                <option value="{{ d.id_department }}" {% if obj.use_department_id|string == d.id_department|string %}selected{% endif %}>
+                    {{ d.department_name }}
+                </option>
+                {% endfor %}
+            </select>
+            {% if rules.lock_use %}
+            <input type="hidden" name="use_department_id" value="{{ obj.use_department_id }}">
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 7. 安装位置 -->
+    <div class="layui-form-item">
+        <label class="layui-form-label">安装位置</label>
+        <div class="layui-input-block">
+            <input type="text" name="install_location" value="{{ obj.install_location or '' }}" class="layui-input" placeholder="如：住院楼-3F-配电室">
+        </div>
+    </div>
+
+    <!-- 8. 扩展属性 (动态KV) -->
+    <div class="layui-form-item">
+        <label class="layui-form-label">技术参数</label>
+        <div class="layui-input-block" id="extra-box">
+            <div style="margin-bottom: 8px;">
+                <button type="button" class="layui-btn layui-btn-xs layui-btn-primary" onclick="addExtra('','')">
+                    <i class="layui-icon layui-icon-add-1"></i> 添加参数
+                </button>
+            </div>
+            <!-- 动态插入区域 -->
+        </div>
+    </div>
+
+    <!-- 底部按钮 -->
+    <div class="layui-form-item" style="text-align:center; margin-top:30px; border-top: 1px solid #f0f0f0; padding-top: 20px;">
+        <button class="layui-btn layui-btn-normal" lay-submit lay-filter="saveBtn">保存提交</button>
+        <button type="button" class="layui-btn layui-btn-primary" onclick="parent.layer.closeAll()">取消</button>
+    </div>
+</form>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['form','jquery','layer', 'laydate'], function(){
+    var form = layui.form, 
+        $ = layui.jquery, 
+        layer = layui.layer,
+        laydate = layui.laydate;
+        
+    // 后端传来的变量
+    var rules = {{ rules|tojson }};
+    var extras = {{ obj.extra_data_dict|tojson|safe }};
+    // 【适配】使用 Level 和 WorkFlag
+    var currentLevel = {{ user.current_level|default(0) }};
+    var workFlag = {{ user.work_flag|default(0) }};
+
+    // --- 扩展属性逻辑 ---
+    window.delExtra = function(btn) {
+        $(btn).closest('.ex-row').remove();
+    };
+
+    window.addExtra = function(k,v) {
+        var uniqueId = 'val_' + new Date().getTime() + '_' + Math.ceil(Math.random()*1000);
+        var html = `
+            <div class="ex-row">
+                <input class="layui-input k" placeholder="参数名(如:功率)" value="${k}">
+                <input class="layui-input v" id="${uniqueId}" placeholder="参数值" value="${v}">
+                <button type="button" class="layui-btn layui-btn-primary layui-btn-xs" onclick="delExtra(this)" title="删除">
+                    <i class="layui-icon layui-icon-close" style="color:#FF5722;"></i>
+                </button>
+            </div>
+        `;
+        $('#extra-box').append(html);
+    };
+
+    // 初始化扩展属性
+    $.each(extras, function(k,v){ addExtra(k,v); });
+
+    // 智能日期选择器
+    $(document).on('focus', '.ex-row .v', function(){
+        var $this = $(this);
+        var keyName = $this.siblings('.k').val(); 
+        if (keyName && /日期|Date|时间|Time|有效期|维保|Expire/i.test(keyName)) {
+            var type = 'date';
+            if (/时间|Time/i.test(keyName)) type = 'datetime';
+            if(!$this.attr('lay-key')){
+                laydate.render({
+                    elem: this, show: true, type: type, trigger: 'click', 
+                    done: function(value){ $this.val(value); }
+                });
+            }
+        }
+    });
+
+    // --- 医院-科室联动逻辑 ---
+    form.on('select(hosp)', function(data){
+        var hid = data.value;
+        var $mgmt = $('#mgmt'); 
+        var $use = $('#use');   
+        
+        $mgmt.empty().append('<option value="">请选择管理科室</option>');
+        $use.empty().append('<option value="">请选择使用科室</option>');
+
+        // 【适配】Level >= 50 (院管) 或 职能科室 可见"全院通用"
+        if (currentLevel >= 50 || workFlag == 1) {
+            $use.append('<option value="0">全院通用</option>');
+        }
+
+        if(hid){
+            $.get('/system/api/get_depts_by_hospital', {id_hospital: hid}, function(res){
+                if(res.code === 0){
+                    $.each(res.data, function(index, item){
+                        $mgmt.append(new Option(item.department_name, item.id_department));
+                        $use.append(new Option(item.department_name, item.id_department));
+                    });
+                    form.render('select');
+                } else {
+                    layer.msg('无法加载科室数据');
+                }
+            });
+        } else {
+            form.render('select');
+        }
+    });
+
+    // --- 提交逻辑 ---
+    form.on('submit(saveBtn)', function(data){
+        var field = data.field;
+
+        // 🔥 关键修正：对于 disabled 的下拉框，手动取值补全
+        if(rules.lock_hospital || $('select[name="id_hospital"]').prop('disabled')) {
+            field.id_hospital = $('input[name="id_hospital"]').val() || $('select[name="id_hospital"]').val();
+        }
+        if(rules.lock_mgmt || $('select[name="id_department"]').prop('disabled')) {
+            field.id_department = $('input[name="id_department"]').val() || $('select[name="id_department"]').val();
+        }
+        if(rules.lock_use || $('select[name="use_department_id"]').prop('disabled')) {
+            field.use_department_id = $('input[name="use_department_id"]').val() || $('select[name="use_department_id"]').val();
+        }
+
+        // 收集扩展属性
+        var ex = {};
+        $('.ex-row').each(function(){
+            var k = $(this).find('.k').val().trim();
+            var v = $(this).find('.v').val().trim();
+            if(k) ex[k] = v;
+        });
+        field.extra_json = ex;
+
+        var loadIndex = layer.load(2);
+        $.ajax({
+            url: '/devices/api/device_save', 
+            type: 'POST', 
+            contentType: 'application/json', 
+            data: JSON.stringify(field),
+            success: function(res) {
+                layer.close(loadIndex);
+                if(res.code === 0) { 
+                    parent.layer.msg('保存成功', {icon: 1, time: 1000}, function(){
+                        var index = parent.layer.getFrameIndex(window.name); 
+                        parent.layer.close(index);
+                    });
+                } else { 
+                    layer.msg(res.msg || '保存失败', {icon: 2, anim: 6}); 
+                }
+            },
+            error: function() {
+                layer.close(loadIndex);
+                layer.msg('网络请求异常', {icon: 2});
+            }
+        });
+        return false; 
+    });
+});
+</script>
+</body>
+</html>

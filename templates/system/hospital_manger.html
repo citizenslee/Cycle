@@ -1,0 +1,152 @@
+
+  <script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+{% block content %}
+<div style="padding: 15px;">
+    <div class="layui-card">
+        <div class="layui-card-body">
+            <!-- 头部工具栏 -->
+            <script type="text/html" id="toolbarDemo">
+                <div class="layui-btn-container">
+                    <button class="layui-btn layui-btn-sm" lay-event="add">
+                        <i class="layui-icon layui-icon-add-1"></i> 新增院区
+                    </button>
+                </div>
+            </script>
+
+            <!-- 数据表格 -->
+            <table id="hospitalTable" lay-filter="hospitalTable"></table>
+
+            <!-- 行工具栏 -->
+            <script type="text/html" id="barDemo">
+                <a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>
+                <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a>
+            </script>
+        </div>
+    </div>
+</div>
+
+<!-- 弹窗表单 -->
+<div id="hospitalForm" style="display:none; padding: 20px;">
+    <form class="layui-form" lay-filter="formFilter">
+        <input type="hidden" name="id_hospital">
+        <div class="layui-form-item">
+            <label class="layui-form-label">区域名称</label>
+            <div class="layui-input-block">
+                <input type="text" name="area_name" required lay-verify="required" placeholder="如：华东区" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item">
+            <label class="layui-form-label">医院名称</label>
+            <div class="layui-input-block">
+                <input type="text" name="hospital_name" required lay-verify="required" placeholder="请输入医院全称" autocomplete="off" class="layui-input">
+            </div>
+        </div>
+        <div class="layui-form-item" style="text-align: right;">
+            <button class="layui-btn" lay-submit lay-filter="saveBtn">保存</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+layui.use(['table', 'form', 'layer', 'jquery'], function(){
+    var table = layui.table;
+    var form = layui.form;
+    var layer = layui.layer;
+    var $ = layui.jquery;
+
+    // 渲染表格
+    table.render({
+        elem: '#hospitalTable',
+        url: '/system/api/hospital', // 后端接口
+        toolbar: '#toolbarDemo',
+        cols: [[
+            {field: 'id_hospital', title: 'ID', width: 80, sort: true},
+            {field: 'area_name', title: '区域名称', width: 150},
+            {field: 'hospital_name', title: '医院名称'},
+            {fixed: 'right', title:'操作', toolbar: '#barDemo', width: 150}
+        ]],
+        page: true
+    });
+
+    // 监听头部工具栏
+    table.on('toolbar(hospitalTable)', function(obj){
+        if(obj.event === 'add'){
+            openForm("新增院区", {});
+        }
+    });
+
+    // 监听行工具栏
+    table.on('tool(hospitalTable)', function(obj){
+        var data = obj.data;
+        if(obj.event === 'del'){
+            layer.confirm('确定要删除该机构吗？', function(index){
+                $.ajax({
+                    url: '/system/api/hospital',
+                    type: 'DELETE',
+                    contentType: 'application/json',
+                    data: JSON.stringify({id_hospital: data.id_hospital}),
+                    success: function(res){
+                        if(res.code === 0){
+                            obj.del();
+                            layer.close(index);
+                            layer.msg('删除成功');
+                        } else {
+                            layer.msg(res.msg);
+                        }
+                    }
+                });
+            });
+        } else if(obj.event === 'edit'){
+            openForm("编辑院区", data);
+        }
+    });
+
+    // 打开弹窗函数
+    function openForm(title, formData){
+        // 清空表单
+        form.val("formFilter", {
+            "id_hospital": "", "area_name": "", "hospital_name": ""
+        });
+        
+        // 如果是编辑，赋值
+        if(formData.id_hospital){
+            form.val("formFilter", formData);
+        }
+
+        layer.open({
+            type: 1,
+            title: title,
+            area: ['500px', '300px'],
+            content: $('#hospitalForm'),
+            success: function(layero, index){
+                // 监听提交
+                form.on('submit(saveBtn)', function(data){
+                    var field = data.field;
+                    var method = field.id_hospital ? 'PUT' : 'POST';
+                    
+                    $.ajax({
+                        url: '/system/api/hospital',
+                        type: method,
+                        contentType: 'application/json',
+                        data: JSON.stringify(field),
+                        success: function(res){
+                            if(res.code === 0){
+                                layer.close(index);
+                                layer.msg('操作成功');
+                                table.reload('hospitalTable');
+                            } else {
+                                layer.msg(res.msg);
+                            }
+                        }
+                    });
+                    return false; // 阻止表单跳转
+                });
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>排班规则配置中心</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+      <script src="{{ url_for('static', filename='Sortable.min.js') }}"></script>
+    <style>
+        :root {
+            --primary-color: #1E9FFF;
+            --bg-color: #f2f6f8;
+            --card-shadow: 0 4px 16px rgba(0,0,0,.08);
+        }
+        body { background-color: var(--bg-color); padding: 15px; color: #333; }
+        
+        /* === 卡片优化 === */
+        .layui-card { border-radius: 8px; box-shadow: var(--card-shadow); border: none; margin-bottom: 15px; }
+        .layui-card-header { 
+                                display: flex;                /* 1. 启用弹性布局 */
+                                justify-content: space-between; /* 2. 内容两端对齐（左边标题，右边按钮） */
+                                align-items: center;          /* 3. 垂直居中 */
+                                font-weight: 600; 
+                                font-size: 16px; 
+                                height: 50px;                 /* 这里的样式可以根据需要调整 */
+                                padding: 0 15px;
+                            }
+        .header-actions .layui-btn { border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+
+        /* === 表格优化 === */
+        .layui-table-view { border-radius: 0 0 8px 8px; border: none; }
+        .layui-table-cell { height: auto !important; line-height: 24px; padding: 10px; overflow: visible !important; }
+        .layui-table-box, .layui-table-body { overflow: visible !important; }
+        
+        /* 班次信息列样式 */
+        .shift-info-cell { display: flex; align-items: center; }
+        .shift-color-bar { width: 6px; height: 36px; border-radius: 3px; margin-right: 12px; flex-shrink: 0; }
+        .shift-detail h4 { font-weight: bold; font-size: 14px; margin: 0; color: #333; }
+        .shift-detail p { font-size: 12px; color: #999; margin: 2px 0 0 0; font-family: monospace; }
+
+        /* 表单控件微调 */
+        .table-select { height: 32px; border-color: #eee; border-radius: 4px; font-size: 13px; color: #555; transition: all .3s; }
+        .table-select:hover, .table-select:focus { border-color: var(--primary-color); }
+        .table-input { height: 32px; border: 1px solid #eee; border-radius: 4px; text-align: center; color: #333; font-weight: bold; }
+        .multi-select-input { 
+            height: 32px; line-height: 30px; border: 1px dashed #ccc; border-radius: 4px; 
+            padding: 0 10px; font-size: 12px; color: #666; cursor: pointer; background: #fff;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%;
+        }
+        .multi-select-input:hover { border-color: var(--primary-color); color: var(--primary-color); background: #f9fcff; }
+        .multi-select-input.has-val { border-style: solid; color: #333; border-color: #e6e6e6; }
+
+        /* === 日历优化 === */
+        .calendar-wrap { padding: 10px; }
+        .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .cal-title { font-size: 16px; font-weight: bold; color: #333; }
+        .cal-btn { 
+            width: 28px; height: 28px; line-height: 28px; text-align: center; 
+            border-radius: 50%; cursor: pointer; transition: background .2s; color: #666;
+        }
+        .cal-btn:hover { background: #eef; color: var(--primary-color); }
+
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; text-align: center; }
+        .cal-head-item { font-size: 12px; color: #999; padding-bottom: 5px; }
+        
+        .cal-day-item { 
+            height: 36px; line-height: 36px; border-radius: 6px; cursor: pointer; 
+            font-size: 14px; color: #333; position: relative; border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        .cal-day-item:hover { background: #f0faff; border-color: #b3d8ff; color: var(--primary-color); transform: translateY(-1px); }
+        .cal-day-item.today { font-weight: bold; color: var(--primary-color); text-decoration: underline; }
+        
+        /* 日历状态样式 */
+        .cal-status-holiday { background: #fff1f0 !important; border-color: #ffa39e !important; color: #cf1322 !important; }
+        .cal-status-workday { background: #f6ffed !important; border-color: #b7eb8f !important; color: #389e0d !important; }
+        /* 状态小圆点（用于图例） */
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+        /* === 拖拽列表 === */
+        #sortableList li { 
+            padding: 10px 15px; 
+            border: 1px solid #eee; 
+            margin-bottom: 8px;
+            border-radius: 4px; 
+            background: #fff;
+            display: flex;
+            justify-content: space-between; 
+            align-items: center; 
+            cursor: move;
+            transition: box-shadow .2s;
+        }
+        #sortableList li:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-color: #ddd; }
+        .sort-handle { color: #ccc; padding: 5px; }
+    </style>
+</head>
+<body>
+
+<!-- 全局变量 -->
+<input type="hidden" id="deptId" value="{{ dept_id }}">
+<div id="staffData" style="display:none;">{{ users | tojson }}</div>
+
+<div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        
+        <!-- 左侧：规则配置 -->
+        <div class="layui-col-md9">
+            <div class="layui-card">
+                <div class="layui-card-header">
+                    <span><i class="layui-icon layui-icon-set-fill" style="color: #1E9FFF; margin-right: 8px;"></i> 【{{ hospital_name }}】-【{{ dept_name }}】班次与规则配置</span>
+                    <div class="header-actions">
+                        <button class="layui-btn layui-btn-sm layui-btn-primary" id="btnAddShift">
+                            <i class="layui-icon layui-icon-add-1"></i> 新增
+                        </button>
+                        <button class="layui-btn layui-btn-sm layui-btn-normal" id="btnSaveRules">
+                            <i class="layui-icon layui-icon-release"></i> 保存全部配置
+                        </button>
+                    </div>
+                </div>
+                <div class="layui-card-body" style="padding: 0;">
+                    <table id="mainTable" lay-filter="mainTable"></table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：日历 -->
+        <div class="layui-col-md3">
+            <div class="layui-card">
+                <div class="layui-card-header">特殊日期管理</div>
+                <div class="layui-card-body">
+                    <div class="calendar-wrap">
+                        <div class="cal-header">
+                            <i class="layui-icon layui-icon-left cal-btn" onclick="calPrevMonth()"></i>
+                            <span class="cal-title" id="calCurrentMonth">2024年 01月</span>
+                            <i class="layui-icon layui-icon-right cal-btn" onclick="calNextMonth()"></i>
+                        </div>
+                        
+                        <!-- 星期头 -->
+                        <div class="cal-grid" style="margin-bottom: 10px;">
+                            <div class="cal-head-item">一</div><div class="cal-head-item">二</div>
+                            <div class="cal-head-item">三</div><div class="cal-head-item">四</div>
+                            <div class="cal-head-item">五</div>
+                            <div class="cal-head-item" style="color:#ff5722">六</div>
+                            <div class="cal-head-item" style="color:#ff5722">日</div>
+                        </div>
+
+                        <!-- 日期格 -->
+                        <div class="cal-grid" id="calDaysRender"></div>
+                        
+                        <!-- 图例 -->
+                        <div style="margin-top: 20px; font-size: 12px; color: #666; display: flex; justify-content: space-around;">
+                            <div><span class="status-dot" style="background:#cf1322;"></span>休假/法定</div>
+                            <div><span class="status-dot" style="background:#389e0d;"></span>工作/调休</div>
+                        </div>
+                        <div class="layui-word-aux" style="font-size: 12px; margin-top: 10px; text-align: center;">
+                            <i class="layui-icon layui-icon-tips"></i> 点击日期可进行设置
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= 模板区 ================= -->
+{% raw %}
+<!-- TPL: 班次信息 (左侧第一列) -->
+<script type="text/html" id="tplShiftInfo">
+    <div class="shift-info-cell">
+        <div class="shift-color-bar" style="background-color: {{ d.color }}"></div>
+        <div class="shift-detail">
+            <h4>{{ d.name }}</h4>
+            <p>
+                {{ d.start_time }} - {{ d.end_time }}
+                {{# if(d.is_next_day){ }} 
+                <span class="layui-badge layui-bg-orange" style="height: 16px; line-height: 16px; padding: 0 3px; font-size: 10px;">次日</span> 
+                {{# } }}
+            </p>
+        </div>
+    </div>
+</script>
+
+<!-- TPL: 模式选择 -->
+<script type="text/html" id="tplModeWork">
+    <select class="table-select item-workday-mode" data-shift="{{d.id}}">
+        <option value="NONE" {{ d.workday_mode == 'NONE' ? 'selected' : '' }} style="color:#999;">🚫 不排班</option>
+        <option value="DUTY" {{ d.workday_mode == 'DUTY' ? 'selected' : '' }}>🔄 轮值排班</option>
+        <option value="FIXED" {{ d.workday_mode == 'FIXED' ? 'selected' : '' }}>🔒 固定人员</option>
+        <option value="ALL"  {{ d.workday_mode == 'ALL' ? 'selected' : '' }}>👥 全员上班</option>
+    </select>
+</script>
+
+<script type="text/html" id="tplModeWeek">
+    <select class="table-select item-weekend-mode" data-shift="{{d.id}}">
+        <option value="NONE" {{ d.weekend_mode == 'NONE' ? 'selected' : '' }} style="color:#999;">🚫 不排班</option>
+        <option value="DUTY" {{ d.weekend_mode == 'DUTY' ? 'selected' : '' }}>🔄 轮值排班</option>
+        <option value="FIXED" {{ d.weekend_mode == 'FIXED' ? 'selected' : '' }}>🔒 固定人员</option>
+        <option value="ALL"  {{ d.weekend_mode == 'ALL' ? 'selected' : '' }}>👥 全员上班</option>
+    </select>
+</script>
+
+<!-- TPL: 人数 -->
+<script type="text/html" id="tplCount">
+    <input type="number"
+           class="table-input item-duty-count"
+           value="{{ d.duty_count || 1 }}"
+           min="1"
+           data-shift="{{d.id}}"
+           style="width:110px;">
+</script>
+
+
+<!-- TPL: 人员选择 -->
+<script type="text/html" id="tplFixed">
+    <div class="multi-select-input {{ d.fixed_user_ids ? 'has-val' : '' }} item-fixed" 
+         title="{{ d.fixed_names || '未设置' }}"
+         data-ids="{{ d.fixed_user_ids || '' }}" 
+         onclick="openUserSelect(this, 'fixed')">
+        {{ d.fixed_names || '选择人员...' }}
+    </div>
+</script>
+
+<script type="text/html" id="tplExclude">
+    <div class="multi-select-input {{ d.exclude_user_ids ? 'has-val' : '' }} item-exclude" 
+         title="{{ d.exclude_names || '未设置' }}"
+         data-ids="{{ d.exclude_user_ids || '' }}" 
+         onclick="openUserSelect(this, 'exclude')">
+        {{ d.exclude_names || '选择人员...' }}
+    </div>
+</script>
+{% endraw %}
+<!-- TPL: 操作 -->
+<script type="text/html" id="tplOps">
+    <button class="layui-btn layui-btn-xs layui-btn-primary" lay-event="edit" lay-tips="编辑班次属性"><i class="layui-icon layui-icon-edit"></i>编辑</button>
+    <button class="layui-btn layui-btn-xs layui-btn-warm" lay-event="sort" lay-tips="调整轮值优先级"><i class="layui-icon layui-icon-transfer"></i> 排序</button>
+    <button class="layui-btn layui-btn-xs layui-btn-danger" lay-event="del" lay-tips="删除班次"><i class="layui-icon layui-icon-delete"></i>删除</button>
+</script>
+
+<!-- 弹窗：编辑/新增班次 -->
+<script type="text/html" id="shiftFormTpl">
+    <div style="padding: 25px 30px 0 0;">
+        <form class="layui-form" lay-filter="shiftForm">
+            <input type="hidden" name="id">
+            <input type="hidden" name="id_department" value="{{ dept_id }}">
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">班次名称</label>
+                <div class="layui-input-block">
+                    <input type="text" name="name" required lay-verify="required" placeholder="如：早班" class="layui-input">
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">显示颜色</label>
+                <div class="layui-input-inline" style="width: 150px;">
+                    <input type="text" name="color" id="colorInput" value="#1E9FFF" class="layui-input">
+                </div>
+                <div class="layui-input-inline" style="width: 50px;">
+                    <div id="colorPicker"></div>
+                </div>
+            </div>
+            
+            <div class="layui-form-item">
+                <label class="layui-form-label">工作时间</label>
+                <div class="layui-input-inline" style="width: 100px;">
+                    <input type="text" name="start_time" id="timeStart" class="layui-input" placeholder="08:00" readonly>
+                </div>
+                <div class="layui-form-mid">-</div>
+                <div class="layui-input-inline" style="width: 100px;">
+                    <input type="text" name="end_time" id="timeEnd" class="layui-input" placeholder="17:00" readonly>
+                </div>
+            </div>
+
+            <div class="layui-form-item">
+                <label class="layui-form-label">跨天班次</label>
+                <div class="layui-input-block">
+                    <input type="checkbox" name="is_next_day" lay-skin="switch" lay-text="是|否">
+                    <div class="layui-word-aux" style="margin-top:5px; font-size:12px;">开启后，结束时间将被视为次日 (如 22:00-06:00)</div>
+                </div>
+            </div>
+            
+            <!-- 隐藏提交按钮，由弹窗按钮触发 -->
+            <button class="layui-btn layui-hide" lay-submit lay-filter="saveShiftSubmit" id="btnSaveShiftSubmit">提交</button>
+        </form>
+    </div>
+</script>
+
+<!-- 弹窗：轮值排序 -->
+<script type="text/html" id="sortModalTpl">
+    <div style="padding: 15px;">
+        <div class="layui-elem-quote layui-quote-nm" style="font-size: 13px; color: #666; border-left-color: #ffb800; margin-bottom: 10px;">
+            <i class="layui-icon layui-icon-tips"></i> 拖动人员调整顺序。排在上面的人员将优先被安排该班次。
+        </div>
+        <ul id="sortableList" style="max-height: 400px; overflow-y: auto;"></ul>
+        <div style="text-align: right; margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+            <button class="layui-btn layui-btn-normal" id="btnSaveSort">保存顺序</button>
+        </div>
+    </div>
+</script>
+
+<!-- 弹窗：节假日设置 (新) -->
+<script type="text/html" id="holidayFormTpl">
+    <div style="padding: 20px;">
+        <form class="layui-form" lay-filter="holidayForm">
+            <div class="layui-form-item">
+                <label class="layui-form-label">日期类型</label>
+                <div class="layui-input-block">
+                    <input type="radio" name="type" value="HOLIDAY" title="休假 (法定/周末)" checked>
+                    <input type="radio" name="type" value="WORKDAY" title="工作 (调休/补班)">
+                </div>
+            </div>
+            <div class="layui-form-item">
+                <label class="layui-form-label">备注说明</label>
+                <div class="layui-input-block">
+                    <input type="text" name="note" placeholder="可选，如：国庆节" class="layui-input">
+                </div>
+            </div>
+            <div class="layui-form-item" style="text-align: right; margin-top: 25px;">
+                <button type="button" class="layui-btn layui-btn-primary" id="btnHolidayDelete">恢复默认</button>
+                <button class="layui-btn layui-btn-normal" lay-submit lay-filter="saveHolidaySubmit">确认设置</button>
+            </div>
+        </form>
+    </div>
+</script>
+
+<script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+<script>
+    const DEPT_ID = document.getElementById('deptId').value;
+    const ALL_STAFF = JSON.parse(document.getElementById('staffData').innerHTML);
+    let holidayDataMap = {}; 
+    let currentRenderDate = new Date();
+
+    // === 工具函数 ===
+    function formatDateYMD(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    // === 人员选择器 ===
+    window.openUserSelect = function(elem, type){
+        layui.use(['layer', 'form', 'jquery'], function(){
+            var layer = layui.layer, form = layui.form, $ = layui.jquery;
+            var $input = $(elem);
+            var currentIds = $input.attr('data-ids') ? $input.attr('data-ids').split(',') : [];
+            
+            var html = '<div style="padding:15px; max-height:350px; overflow-y:auto;"><form class="layui-form">';
+            if(ALL_STAFF.length === 0) html += '<p style="text-align:center;color:#999;">暂无人员数据</p>';
+            $.each(ALL_STAFF, function(i, u){
+                var checked = currentIds.includes(String(u.id)) ? 'checked' : '';
+                html += `<div style="margin-bottom:5px;"><input type="checkbox" name="uids" value="${u.id}" title="${u.username}" lay-skin="primary" ${checked}></div>`;
+            });
+            html += '</form></div>';
+
+            layer.open({
+                type: 1, 
+                title: type === 'fixed' ? '选择【固定/专职】人员' : '选择【排除/不排】人员',
+                area: ['350px', '450px'], 
+                content: html,
+                btn: ['确定', '清空选择'],
+                success: function(){ form.render('checkbox'); },
+                yes: function(index, layero){
+                    var ids = [], names = [];
+                    layero.find('input[name="uids"]:checked').each(function(){
+                        ids.push($(this).val());
+                        names.push($(this).attr('title'));
+                    });
+                    $input.attr('data-ids', ids.join(',')).attr('title', names.join(','));
+                    $input.text(names.length > 0 ? names.join(',') : '选择人员...');
+                    if(names.length > 0) $input.addClass('has-val'); else $input.removeClass('has-val');
+                    layer.close(index);
+                },
+                btn2: function(index){
+                    $input.attr('data-ids', '').attr('title', '未设置').text('选择人员...').removeClass('has-val');
+                    layer.close(index);
+                }
+            });
+        });
+    };
+
+    layui.use(['table', 'layer', 'jquery', 'form', 'laydate', 'colorpicker'], function(){
+        var table = layui.table, layer = layui.layer, $ = layui.jquery, 
+            form = layui.form, laydate = layui.laydate, colorpicker = layui.colorpicker;
+
+        // === 1. 表格渲染 ===
+        var tableIns = table.render({
+            elem: '#mainTable',
+            url: '/schedule/api/config/list',
+            where: { dept_id: DEPT_ID },
+            cols: [[
+                {field: 'name', title: '班次信息', width: 350, templet: '#tplShiftInfo', fixed: 'left'},
+                {title: '工作日策略', width: 160, templet: '#tplModeWork', align: 'center'},
+                {title: '周末/假期策略', width: 160, templet: '#tplModeWeek', align: 'center'},
+                {title: '值班人数', width: 130, templet: '#tplCount', align: 'center'},
+                {title: '固定人员', width: 250, templet: '#tplFixed', align: 'center'},
+                {title: '排除人员', width: 250, templet: '#tplExclude', align: 'center'},
+                {title: '操作', width: 240, templet: '#tplOps', fixed: 'right', align: 'center'}
+            ]],
+            page: false,
+            height: 'full-160', // 自动撑满高度
+            text: { none: '暂无班次数据，请点击右上角新增' },
+            done: function() {
+                // 渲染 select
+                form.render('select');
+            }
+        });
+
+        // === 2. 班次操作 ===
+        $('#btnAddShift').on('click', () => openShiftModal());
+        
+        // 批量保存配置
+        $('#btnSaveRules').on('click', function(){
+            var configs = [];
+            $('.item-workday-mode').each(function(){
+                var $this = $(this);
+                var shiftId = $this.attr('data-shift');
+                var $tr = $this.closest('tr');
+                configs.push({
+                    shift_id: shiftId,
+                    workday_mode: $this.val(),
+                    weekend_mode: $tr.find('.item-weekend-mode').val(),
+                    duty_count: $tr.find('.item-duty-count').val(),
+                    fixed_user_ids: $tr.find('.item-fixed').attr('data-ids'),
+                    exclude_user_ids: $tr.find('.item-exclude').attr('data-ids')
+                });
+            });
+
+            var loadIdx = layer.msg('保存中...', {icon: 16, shade: 0.3, time: 0});
+            $.ajax({
+                url: '/schedule/api/config/save',
+                type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ dept_id: DEPT_ID, configs: configs }),
+                success: function(res){
+                    layer.close(loadIdx);
+                    if(res.success) layer.msg('保存成功', {icon: 1, time: 1000});
+                    else layer.alert('保存失败: ' + res.msg, {icon: 2});
+                },
+                error: function(){ layer.close(loadIdx); layer.msg('请求出错', {icon: 2}); }
+            });
+        });
+
+        table.on('tool(mainTable)', function(obj){
+            var data = obj.data;
+            if(obj.event === 'del'){
+                layer.confirm('确定删除班次【'+data.name+'】吗？<br><span style="color:#f5222d;font-size:12px">注意：这将同时删除该班次的所有历史规则配置和轮值顺序。</span>', {icon: 3, title:'高危操作'}, function(index){
+                        // === 修改开始 ===
+                        $.ajax({
+                            url: '/schedule/api/shift/delete',
+                            type: 'POST',
+                            contentType: 'application/json', // 【关键】必须加上这一行
+                            data: JSON.stringify({ id: data.id }),
+                            success: function(res){
+                                if(res.success) { 
+                                    obj.del(); 
+                                    layer.msg('已删除'); 
+                                } else { 
+                                    layer.msg(res.msg, {icon: 2});
+                                }
+                            },
+                            error: function(xhr) {
+                                layer.msg('请求出错：' + xhr.status, {icon: 2});
+                            }
+                        });
+                        // === 修改结束 ===
+                        
+                        layer.close(index); // 关闭确认框
+                    });
+            } else if(obj.event === 'edit'){
+                openShiftModal(data);
+            } else if(obj.event === 'sort'){
+                openSortModal(data);
+            }
+        });
+
+        // 班次弹窗
+        // 班次弹窗
+        function openShiftModal(data) {
+            var isEdit = !!data;
+            layer.open({
+                type: 1, title: isEdit ? '编辑班次' : '新增班次',
+                area: ['500px', '460px'],
+                content: $('#shiftFormTpl').html(),
+                btn: ['保存提交', '取消'],
+                yes: function(index, layero){ layero.find('#btnSaveShiftSubmit').click(); },
+                success: function(layero, index){
+                    laydate.render({ elem: '#timeStart', type: 'time', format: 'HH:mm' });
+                    laydate.render({ elem: '#timeEnd', type: 'time', format: 'HH:mm' });
+                    colorpicker.render({
+                        elem: '#colorPicker', color: isEdit ? data.color : '#1E9FFF',
+                        done: function(color){ $('#colorInput').val(color); }
+                    });
+                    
+                    form.render(null, 'shiftForm');
+                    if(isEdit) {
+                        form.val('shiftForm', {
+                            "id": data.id, "name": data.name, "color": data.color,
+                            "start_time": data.start_time, "end_time": data.end_time,
+                            "is_next_day": (data.is_next_day == 1)
+                        });
+                    }
+
+                    form.on('submit(saveShiftSubmit)', function(fieldData){
+                        var field = fieldData.field;
+
+                        // --- 新增校验逻辑 开始 ---
+
+                        // 1. 校验必填
+                        if(!field.start_time || !field.end_time) {
+                            layer.msg('请填写完整的开始时间和结束时间', {icon: 2, anim: 6});
+                            return false;
+                        }
+
+                        // 2. 校验时间逻辑
+                        // Layui checkbox 选中时值为 'on'，未选中为 undefined 或 ''
+                        var isNextDay = field.is_next_day === 'on'; 
+                        
+                        // 字符串直接比较 "HH:mm" 是可行的 (例如 "09:00" > "08:00")
+                        if (!isNextDay) {
+                            if (field.end_time < field.start_time) {
+                                layer.msg('未开启“跨天”时，结束时间不能早于开始时间', {icon: 2, anim: 6});
+                                return false;
+                            }
+                            // 如果不允许时间相等（如 09:00 到 09:00），可以将 < 改为 <=
+                            if (field.end_time === field.start_time) {
+                                layer.msg('开始时间和结束时间不能相同', {icon: 2, anim: 6}); // 可选校验
+                                return false;
+                            }
+                        }
+
+                        // --- 新增校验逻辑 结束 ---
+
+                        // 数据格式转换
+                        field.is_next_day = isNextDay ? 1 : 0;
+                        
+                        var loadIdx = layer.load(2);
+                        $.ajax({
+                            url: '/schedule/api/shift/save',
+                            type: 'POST', contentType: 'application/json',
+                            data: JSON.stringify(field),
+                            success: function(res){
+                                layer.close(loadIdx);
+                                if(res.success){
+                                    layer.close(index);
+                                    tableIns.reload();
+                                    layer.msg('班次已保存', {icon: 1});
+                                } else layer.msg(res.msg, {icon: 2});
+                            }
+                        });
+                        return false;
+                    });
+                }
+            });
+        }
+
+        // 轮值排序弹窗
+        function openSortModal(shiftData) {
+            var loadIdx = layer.load(2);
+            $.get('/schedule/api/rotation/get', {dept_id: DEPT_ID, shift_id: shiftData.id}, function(res){
+                layer.close(loadIdx);
+                if(!res.success) return layer.msg('数据获取失败');
+                
+                layer.open({
+                    type: 1, title: '调整轮值顺序 - ' + shiftData.name,
+                    area: ['420px', '520px'],
+                    content: $('#sortModalTpl').html(),
+                    success: function(layero, index){
+                        var $list = layero.find('#sortableList');
+                        if(res.data.length === 0) $list.html('<li style="text-align:center;border:none;color:#999;padding:20px;">暂无人员</li>');
+                        
+                        res.data.forEach(function(u){
+                            $list.append(`<li data-id="${u.id}">
+                                <span><i class="layui-icon layui-icon-username"></i> ${u.username}</span>
+                                <i class="layui-icon layui-icon-more-vertical sort-handle"></i>
+                            </li>`);
+                        });
+
+                        new Sortable($list[0], { animation: 150, ghostClass: 'layui-bg-gray' });
+
+                        // 原来的 $.post 代码替换为下面的 $.ajax 代码
+                        layero.find('#btnSaveSort').on('click', function(){
+                            var userIds = [];
+                            $list.find('li').each(function(){ userIds.push($(this).data('id')); });
+                            
+                            var payload = { 
+                                dept_id: DEPT_ID, 
+                                shift_id: shiftData.id, 
+                                user_ids: userIds 
+                            };
+
+                            console.log("发送数据:", payload); // 调试用
+
+                            $.ajax({
+                                url: '/schedule/api/rotation/save',
+                                type: 'POST',
+                                contentType: 'application/json', // 【关键】必须指定内容类型为 JSON
+                                data: JSON.stringify(payload),   // 数据序列化
+                                dataType: 'json',                // 预期服务器返回的数据类型
+                                success: function(sRes){
+                                    if(sRes.success){ 
+                                        layer.msg('顺序更新成功'); 
+                                        layer.close(index); 
+                                    } else { 
+                                        layer.msg(sRes.msg); 
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error("请求失败:", error);
+                                    layer.msg('保存失败，请检查网络或日志');
+                                }
+                            });
+                        });
+                    }
+                });
+            });
+        }
+
+        // === 3. 日历与节假日 ===
+        window.loadHolidays = function(){
+            $.get('/schedule/api/holiday/list', {dept_id: DEPT_ID, t: new Date().getTime()}, function(res){
+                if(res.code === 0) {
+                    holidayDataMap = res.data; 
+                    renderCalendar();
+                }
+            });
+        };
+
+        window.renderCalendar = function() {
+            var year = currentRenderDate.getFullYear();
+            var month = currentRenderDate.getMonth();
+            $('#calCurrentMonth').text(`${year}年 ${(month + 1).toString().padStart(2, '0')}月`);
+
+            var $container = $('#calDaysRender').empty();
+            var firstDay = new Date(year, month, 1).getDay();
+            var startOffset = firstDay === 0 ? 6 : firstDay - 1; 
+            var daysInMonth = new Date(year, month + 1, 0).getDate();
+            var todayStr = formatDateYMD(new Date());
+
+            for(var i = 0; i < startOffset; i++) $container.append('<div></div>');
+
+            for(var d = 1; d <= daysInMonth; d++){
+                var dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                var item = holidayDataMap[dateStr];
+                
+                var cls = 'cal-day-item';
+                if(dateStr === todayStr) cls += ' today';
+                if(item) {
+                    if(item.type === 'HOLIDAY') cls += ' cal-status-holiday';
+                    else if(item.type === 'WORKDAY') cls += ' cal-status-workday';
+                }
+                
+                var tip = item && item.note ? `title="${item.note}"` : '';
+                $container.append(`<div class="${cls}" ${tip} onclick="openHolidaySetting('${dateStr}')">${d}</div>`);
+            }
+        };
+
+        window.calPrevMonth = function() { currentRenderDate.setMonth(currentRenderDate.getMonth() - 1); renderCalendar(); };
+        window.calNextMonth = function() { currentRenderDate.setMonth(currentRenderDate.getMonth() + 1); renderCalendar(); };
+
+        window.openHolidaySetting = function(dateStr){
+            var dataItem = holidayDataMap[dateStr];
+            layer.open({
+                type: 1, title: '特殊日期设置 - ' + dateStr, 
+                area: ['380px', '280px'], shadeClose: true,
+                content: $('#holidayFormTpl').html(),
+                success: function(layero, index){
+                    form.render(null, 'holidayForm');
+                    
+                    // 回显
+                    if(dataItem){
+                        form.val('holidayForm', { "type": dataItem.type, "note": dataItem.note });
+                    }
+
+                    // 保存
+                    form.on('submit(saveHolidaySubmit)', function(data){
+                        var payload = { dept_id: DEPT_ID, date: dateStr, type: data.field.type, note: data.field.note };
+                        $.ajax({
+                            url: '/schedule/api/holiday/set', type: 'POST', contentType: 'application/json',
+                            data: JSON.stringify(payload),
+                            success: function(res){
+                                if(res.success) { layer.close(index); layer.msg('设置成功'); loadHolidays(); }
+                                else layer.msg(res.msg);
+                            }
+                        });
+                        return false;
+                    });
+
+                    // 恢复默认
+                    layero.find('#btnHolidayDelete').on('click', function(){
+                        $.ajax({
+                            url: '/schedule/api/holiday/delete', type: 'POST', contentType: 'application/json',
+                            data: JSON.stringify({ dept_id: DEPT_ID, date: dateStr }),
+                            success: function(res){
+                                if(res.success) { layer.close(index); layer.msg('已恢复为默认规则'); loadHolidays(); }
+                            }
+                        });
+                    });
+                }
+            });
+        };
+
+        loadHolidays();
+    });
+</script>
+</body>
+</html>

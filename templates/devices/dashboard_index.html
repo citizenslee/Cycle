@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>设备管理首页</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="/static/layui/css/layui.css" media="all">
+  
+  <style>
+    body { background-color: #f2f2f2; padding: 15px; }
+    
+    /* === 卡片通用样式 === */
+    .dashboard-card {
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-radius: 8px; /* 圆角稍微大一点 */
+        text-align: center;
+        border: 1px solid #e6e6e6;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+        border-color: #1E9FFF; /* 悬停时边框变蓝 */
+    }
+    .dashboard-card .layui-card-header {
+        font-weight: 600;
+        font-size: 16px;
+        border-bottom: 1px solid #f0f0f0;
+        color: #333;
+    }
+    .dashboard-card .layui-card-body {
+        padding: 30px 10px;
+        color: #888;
+    }
+    
+    /* 图标通用样式 */
+    .card-icon {
+        font-size: 48px; /* 稍微加大 */
+        display: inline-block;
+        margin-bottom: 15px;
+        transition: transform 0.3s;
+        /* 增加一点阴影让图标浮起来 */
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+    /* 悬停时图标微动 */
+    .dashboard-card:hover .card-icon {
+        transform: scale(1.1); 
+    }
+    
+    .card-desc {
+        font-size: 13px;
+        color: #999;
+        margin-top: 5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* 分类标题样式 */
+    .section-title {
+        margin: 20px 0 15px 5px;
+        font-size: 18px;
+        font-weight: 500;
+        color: #333;
+        border-left: 5px solid #1E9FFF;
+        padding-left: 12px;
+        line-height: 1.2;
+    }
+
+    /* === 配色方案 (Semantic Colors) === */
+    /* 1. 机构 - 蓝色 (稳重、官方) */
+    .c-hospital { color: #1E9FFF; } 
+    /* 2. 科室 - 青色/蓝绿色 (分支、生长) */
+    .c-dept     { color: #009688; }
+    /* 3. 用户 - 紫色 (高贵、管理) */
+    .c-user     { color: #9C27B0; }
+    /* 4. 设备 - 橙色 (硬件、警示) */
+    .c-device   { color: #FF9800; }
+    /* 5. 数据 - 深灰/藏青 (底层、核心) */
+    .c-system   { color: #393D49; }
+
+  </style>
+</head>
+<body>
+<div class="layui-fluid">
+
+  <!-- ======================= 模块 1: 设备台账管理 ======================= -->
+  <div class="section-title">设备台账</div>
+  <div class="layui-row layui-col-space15">
+    
+    <!-- 2101: 核心列表 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2101">
+        <div class="layui-card-header">设备台账列表</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-list card-icon c-blue"></i>
+          <p>设备设施资产总览与查询</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2103: 分类树 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2103">
+        <div class="layui-card-header">周期性计划</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-survey card-icon c-blue"></i>
+          <p>查看、编辑周期性设备设施巡检任务</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2104: 标签打印 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2104">
+        <div class="layui-card-header">设备设施二维码/标签</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-print card-icon c-teal"></i>
+          <p>批量生成与打印设备身份标签</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= 模块 2: 运维与巡检 ======================= -->
+  <div class="section-title" style="margin-top: 30px;">运维保障</div>
+  <div class="layui-row layui-col-space15">
+    
+    <!-- 2201: 巡检 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2201">
+        <div class="layui-card-header">巡检计划</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-survey card-icon c-blue"></i>
+          <p>制定周期性设备巡检任务</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2202: 维保 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2202">
+        <div class="layui-card-header">维保记录</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-form card-icon c-purple"></i>
+          <p>保养、润滑与维护历史记录</p>
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- 2204: 计量/特种设备 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2204">
+        <div class="layui-card-header">计量与年检</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-vercode card-icon c-orange"></i>
+          <p>特种设备年检与仪表校准提醒</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ======================= 模块 3: 生命周期与分析 ======================= -->
+  <div class="section-title" style="margin-top: 30px;">生命周期</div>
+  <div class="layui-row layui-col-space15">
+    
+    <!-- 2301: 调拨 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2301">
+        <div class="layui-card-header">资产调拨</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-transfer card-icon c-green"></i>
+          <p>科室间设备流转与位置变更</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2302: 报废 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2302">
+        <div class="layui-card-header">报废申请</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-delete card-icon c-red"></i>
+          <p>设备处置、报废审批流程</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2303: 供应商 -->
+    <div class="layui-col-md3 layui-col-sm6">
+      <div class="layui-card dashboard-card" data-id="2303">
+        <div class="layui-card-header">供应商/合同</div>
+        <div class="layui-card-body">
+          <i class="layui-icon layui-icon-group card-icon c-cyan"></i>
+          <p>设备厂商、维保单位与合同文件</p>
+        </div>
+      </div>
+    </div>
+
+     <!-- 2304: 统计 -->
+     <div class="layui-col-md3 layui-col-sm6">
+        <div class="layui-card dashboard-card" data-id="2304">
+          <div class="layui-card-header">数据驾驶舱</div>
+          <div class="layui-card-body">
+            <i class="layui-icon layui-icon-chart-screen card-icon c-blue"></i>
+            <p>完好率、维修率等数据分析</p>
+          </div>
+        </div>
+      </div>
+
+  </div>
+
+</div>
+
+<!-- 引入 layui.js -->
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['jquery'], function(){
+  var $ = layui.jquery;
+
+  // 监听卡片点击事件
+  $('.dashboard-card').on('click', function(){
+    var id = $(this).attr('data-id');
+    
+    if(window.parent && window.parent.layui){
+        var $parent = window.parent.layui.jquery;
+        var $menuItem = $parent('.site-menu-active[data-id="'+ id +'"]');
+        
+        if($menuItem.length > 0){
+            $menuItem.click();
+        } else {
+            console.error('在父级菜单中未找到 ID 为 ' + id + ' 的菜单项');
+            layer.msg('无法定位菜单项，请检查权限');
+        }
+    } else {
+        layer.msg('非 Iframe 环境无法打开 Tab');
+    }
+  });
+});
+</script>
+
+</body>
+</html>

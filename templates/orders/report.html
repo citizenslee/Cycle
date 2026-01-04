@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>发起工单 - Cycle智慧工作流平台 </title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='layui/css/layui.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+  <script src="{{ url_for('static', filename='layui/layui.js') }}"></script>
+  
+  <style>
+    /* --- 现代色彩与变量 --- */
+    :root {
+      --primary-grad: linear-gradient(135deg, #62559b 0%, #2c7dbece 100%);
+      --danger-grad: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+      --bg-color: #f0f2f5;
+      --card-bg: #ffffff;
+      --text-main: #1f1f1f;
+      --radius-lg: 20px;
+      --radius-md: 12px;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+    }
+
+    body {
+      background-color: var(--bg-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text-main);
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 16px;
+      padding-bottom: 40px;
+      animation: pageIn 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .brand-header {
+      text-align: center;
+      padding: 15px 0 10px;
+    }
+    .brand-logo {
+      height: 42px;
+      object-fit: contain;
+    }
+
+    /* --- 精简单行版科室卡片 --- */
+    .dept-card-premium {
+      display: none; 
+      position: relative;
+      background: var(--primary-grad);
+      border-radius: 50px; /* 胶囊状 */
+      padding: 10px 20px;
+      margin-bottom: 20px;
+      color: white;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      box-shadow: 0 6px 15px rgba(98, 85, 155, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .dept-card-icon {
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dept-card-icon i { font-size: 18px; color: #fff; }
+
+    .dept-card-content { 
+      flex-grow: 1; 
+      z-index: 1; 
+      font-size: 14px; 
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 背景修饰球 */
+    .dept-card-decoration {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%);
+      border-radius: 50%;
+      right: -10px;
+      top: -10px;
+    }
+
+    /* --- 快捷功能区 --- */
+    .quick-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .action-btn {
+      background: #fff;
+      border-radius: var(--radius-md);
+      padding: 14px 10px;
+      text-align: center;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+      border: 1px solid #f0f0f0;
+    }
+    .action-btn:active { transform: scale(0.95); background: #fafafa; }
+    .action-btn i { font-size: 22px; display: block; margin-bottom: 6px; }
+    .action-btn span { font-size: 13px; font-weight: 600; color: #555; }
+    .btn-staff i { color: #faad14; }
+    .btn-dept i { color: #2f54eb; }
+
+    /* --- 报修表单卡片 --- */
+    .app-card {
+      background: var(--card-bg);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+    }
+    .card-title::before {
+      content: '';
+      width: 4px;
+      height: 16px;
+      background: #62559b;
+      margin-right: 8px;
+      border-radius: 2px;
+    }
+
+    .form-group { margin-bottom: 18px; }
+    .label-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      color: #444;
+    }
+    .label-row i { color: #62559b; margin-right: 6px; }
+
+    .layui-input, .layui-textarea {
+      border: 1px solid #e8e8e8 !important;
+      background-color: #fbfbfb;
+      border-radius: 10px;
+    }
+
+    /* --- 上传区域 --- */
+    .upload-area {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .upload-btn {
+      aspect-ratio: 1/1;
+      border: 1.5px dashed #ccc;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #fafafa;
+      color: #999;
+    }
+    .photo-item {
+      position: relative;
+      aspect-ratio: 1/1;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .photo-item img { width: 100%; height: 100%; object-fit: cover; }
+    .photo-del {
+      position: absolute;
+      top: 0; right: 0;
+      background: rgba(255,77,79,0.9);
+      color: white;
+      width: 18px; height: 18px;
+      text-align: center; line-height: 17px;
+      font-size: 14px; border-bottom-left-radius: 8px;
+    }
+
+    /* --- 提交与紧急按钮 --- */
+    .btn-submit {
+      width: 100%;
+      height: 48px;
+      font-size: 16px;
+      font-weight: 700;
+      border-radius: 24px;
+      background: var(--primary-grad);
+      box-shadow: 0 6px 15px rgba(98, 85, 155, 0.3);
+      border: none;
+      margin-top: 10px;
+    }
+
+    .btn-emergency {
+      width: 100%;
+      margin-top: 15px;
+      background: #fff;
+      color: #ff4d4f;
+      border: 1px solid #ffa39e;
+      border-radius: 24px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none !important;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .footer-support {
+      text-align: center;
+      margin-top: 25px;
+      color: #ccc;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Logo -->
+  <div class="brand-header">
+    <img src="{{ url_for('static', filename='photo/fxjk-logo.png') }}" class="brand-logo">
+  </div>
+
+  <!-- 单行胶囊化科室卡片 -->
+  <div id="deptDisplay" class="dept-card-premium">
+    <div class="dept-card-icon">
+      <i class="layui-icon layui-icon-location"></i>
+    </div>
+    <div class="dept-card-content" id="deptFullInfo">正在识别地点...</div>
+    <div class="dept-card-decoration"></div>
+  </div>
+
+  <!-- 快捷功能 (保持 iframe 逻辑) -->
+  <div class="quick-actions">
+    <div class="action-btn btn-staff" lay-on="select_department_orders">
+      <i class="layui-icon layui-icon-username"></i>
+      <span>工作人员签到/完成</span>
+    </div>
+    <div class="action-btn btn-dept" lay-on="select_dept_department_orders">
+      <i class="layui-icon layui-icon-list"></i>
+      <span>查看工单记录</span>
+    </div>
+  </div>
+
+  <!-- 报修表单 -->
+  <div class="app-card">
+    <div class="card-title">快速报单</div>
+    <form class="layui-form" id="reportForm">
+      <div class="form-group">
+        <div class="label-row">
+          <i class="layui-icon layui-icon-edit"></i>
+          <span>需求详情</span>
+        </div>
+        <textarea name="demand" lay-verify="required" 
+                  placeholder="请输入具体地点和故障描述..." 
+                  class="layui-textarea" style="height: 100px; resize: none;"></textarea>
+      </div>
+
+      <div class="form-group">
+        <div class="label-row">
+          <i class="layui-icon layui-icon-cellphone"></i>
+          <span>联系电话</span>
+        </div>
+        <input type="text" name="contact_phone" lay-verify="required|checkPhone"
+              placeholder="手机号或座机" class="layui-input">
+      </div>
+
+      <div class="form-group">
+        <div class="label-row">
+          <i class="layui-icon layui-icon-camera"></i>
+          <span>现场照片</span>
+        </div>
+        <div class="upload-area">
+          <input type="file" id="realFileInput" accept="image/*" multiple style="display:none;">
+          <div id="previewContainer" style="display:contents;"></div>
+          <div class="upload-btn" id="btnAddPhoto">
+            <i class="layui-icon layui-icon-add-1" style="font-size:22px;"></i>
+            <span style="font-size: 10px; margin-top:2px;">添加</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="layui-btn btn-submit" lay-submit lay-filter="submitReport">提交工单</button>
+      
+      <a href="#" class="btn-emergency" id="jjbx">
+        <i class="layui-icon layui-icon-service" style="margin-right:8px;"></i> 
+        <span>紧急报修 (获取中...)</span>
+      </a>
+    </form>
+  </div>
+
+  <div class="footer-support">© 复星健康Cycle 技术支持</div>
+</div>
+
+<script>
+layui.use(['form', 'layer', 'jquery', 'util'], function(){
+  var form = layui.form, layer = layui.layer, $ = layui.jquery, util = layui.util;
+  var deptCode = "{{ dept_code }}";
+
+  // 1. 科室信息单行显示
+  if (deptCode) {
+    $.getJSON("/orders/url_get_deptname/" + deptCode, function(res){
+      if(res.code === 0){
+        // 合并显示
+        $("#deptFullInfo").text(res.hospital_name + " · " + res.department_name);
+        $("#deptDisplay").css('display', 'flex').hide().fadeIn(600);
+      } else {
+        $("#deptDisplay").css('background', 'var(--danger-grad)');
+        $("#deptFullInfo").text("无效链接");
+        $("#deptDisplay").css('display', 'flex').show();
+      }
+    });
+  }
+
+  // 2. 紧急报修电话
+  $.getJSON("/api/current_duty_phone", function(res){
+    if(res.code === 0){
+      $("#jjbx").attr("href", "tel:" + res.phone).html(`
+        <i class="layui-icon layui-icon-service" style="margin-right:8px;"></i> 
+        紧急报修: ${res.staff} ${res.phone}
+      `);
+    } else {
+      $("#jjbx span").text("暂无值班信息");
+    }
+  });
+
+  // 3. 弹窗逻辑 (iframe 模式，不离开页面)
+  util.on('lay-on', {
+    'select_department_orders': function(){
+       layer.open({
+           type: 2,
+           title: '工作人员签到/完成',
+           shadeClose: true,
+           area: ['100%', '100%'], // 移动端模拟全屏弹窗
+           anim: 2,
+           content: '/orders/get_incomplete_orders/' + deptCode
+       });
+    },
+    'select_dept_department_orders': function(){
+       layer.open({
+           type: 2,
+           title: '科室历史工单',
+           shadeClose: true,
+           area: ['100%', '100%'],
+           anim: 2,
+           content: '/orders/get_dept_incomplete_orders/' + deptCode
+       });
+    }
+  });
+
+  // 4. 照片上传
+  var fileList = [];
+  $('#btnAddPhoto').click(function(){ $('#realFileInput').click(); });
+  $('#realFileInput').change(function(e){
+    var files = e.target.files;
+    if(fileList.length + files.length > 5) { layer.msg('最多上传5张'); return; }
+    for(var i=0; i<files.length; i++){
+      (function(file){
+        fileList.push(file);
+        var reader = new FileReader();
+        reader.onload = function(evt){
+          $('#previewContainer').append(`
+            <div class="photo-item">
+              <img src="${evt.target.result}">
+              <div class="photo-del" onclick="removePhoto(this)">×</div>
+            </div>`);
+        }
+        reader.readAsDataURL(file);
+      })(files[i]);
+    }
+    $(this).val('');
+  });
+
+  window.removePhoto = function(el) {
+    var item = $(el).parent();
+    var index = $('#previewContainer .photo-item').index(item);
+    fileList.splice(index, 1);
+    item.remove();
+  }
+
+  // 5. 提交表单
+  form.verify({ checkPhone: [/^1\d{10}$|^\d{3,4}-?\d{7,8}$/, '电话格式不正确'] });
+
+form.on('submit(submitReport)', function(data){
+    var formData = new FormData();
+    formData.append('dept_code', deptCode);
+    formData.append('demand', data.field.demand);
+    formData.append('contact_phone', data.field.contact_phone);
+    fileList.forEach(f => formData.append('photos[]', f));
+
+    var ld = layer.msg('🤖 AI 正在深度分析工单...', {
+        icon: 16, 
+        shade: 0.3, 
+        time: 0,
+        skin: 'layui-layer-molv'
+    });
+
+    $.ajax({
+      url: '/orders/submit_report',
+      type: 'POST',
+      data: formData,
+      processData: false, 
+      contentType: false,
+      success: function(res){
+        layer.close(ld);
+        if(res.code === 0){
+          // 使用更漂亮的弹窗展示 AI 识别结果
+          layer.open({
+            type: 1,
+            title: false,
+            closeBtn: 0,
+            area: ['85%', 'auto'],
+            anim: 5, 
+            shadeClose: false,
+            content: `
+              <div style="padding:24px; text-align:center;">
+                <i class="layui-icon layui-icon-ok-circle" style="font-size:54px; color:#52c41a;"></i>
+                <h3 style="margin:15px 0 5px; font-size:18px; font-weight:700;">工单提交成功</h3>
+                <p style="color:#999; font-size:12px; margin-bottom:20px;">AI 已为您智能分配处理部门</p>
+                
+                <div style="background:#f8f9ff; padding:15px; border-radius:12px; text-align:left; border:1px solid #eef0fb;">
+                   <div style="margin-bottom:8px; display:flex;">
+                      <span style="color:#888; width:70px; flex-shrink:0;">识别地点:</span>
+                      <b style="color:#333;">${res.ai_location || '现场'}</b>
+                   </div>
+                   <div style="margin-bottom:8px; display:flex;">
+                      <span style="color:#888; width:70px; flex-shrink:0;">处理部门:</span>
+                      <span style="color:#62559b; font-weight:bold;">${res.work_department || '正在分配'}</span>
+                   </div>
+                    <div style="margin-bottom:8px; display:flex;">
+                      <span style="color:#888; width:70px; flex-shrink:0;">工作类型:</span>
+                      <span style="color:#62559b; font-weight:bold;">${res.work_type || '未知'}</span>
+                   </div>
+                   <div style="margin-bottom:8px; display:flex;">
+                      <span style="color:#888; width:70px; flex-shrink:0;">任务类型:</span>
+                      <span style="color:#333;">${res.task_name || '普通任务'}</span>
+                   </div>
+                   <div style="display:flex;">
+                      <span style="color:#888; width:70px; flex-shrink:0;">工单单号:</span>
+                      <span style="color:#aaa; font-family:monospace; font-size:11px;">${res.id}</span>
+                   </div>
+                </div>
+                
+                <button class="layui-btn" id="btnOk" style="margin-top:25px; width:100%; height:44px; background:linear-gradient(135deg, #62559b 0%, #2c7dbece 100%); border-radius:22px; border:none; font-weight:bold;">知道了</button>
+              </div>`,
+            success: function(lo, idx){ 
+              $('#btnOk').click(function(){ 
+                layer.close(idx); 
+                location.reload(); // 成功后刷新页面
+              }); 
+            }
+          });
+        } else {
+          layer.msg(res.msg || '提交失败', {icon: 2});
+        }
+      },
+      error: function() {
+        layer.close(ld);
+        layer.msg('网络连接异常', {icon: 2});
+      }
+    });
+    return false;
+});
+
+
+});
+</script>
+</body>
+</html>

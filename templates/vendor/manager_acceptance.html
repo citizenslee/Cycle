@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>委外核验 - 管理科室</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="icon" href="{{ url_for('static', filename='photo/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>   
+     /* --- 品牌头部 --- */
+    .brand-header {
+      text-align: center;
+      padding: 20px 0 10px;
+    }
+    .brand-logo {
+      height: 40px;
+      object-fit: contain;
+    }
+
+        /* === 样式复用区 === */
+        body { background-color: #f4f7f9; padding: 15px; color: #333; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        .layui-tab-brief { margin-bottom: 20px; }
+        .layui-tab-title { background: #fff; border-radius: 8px; border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.03); height: 50px; line-height: 50px; }
+        .layui-tab-brief > .layui-tab-title .layui-this { color: #1E9FFF !important; font-weight: bold; }
+        .layui-tab-brief > .layui-tab-title .layui-this:after { border-bottom: 3px solid #1E9FFF; height: 35px; }
+        
+        .record-item { background: #fff; padding: 20px 25px; border-radius: 4px 8px 8px 4px; margin-bottom: 20px; position: relative; border: 1px solid #eef2f6; border-left: 6px solid #1E9FFF; box-shadow: 0 3px 10px rgba(0,0,0,0.04); transition: all 0.3s ease; }
+        .record-item:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(30, 159, 255, 0.15); }
+        .record-item[data-status="33"] { border-left-color: #1E9FFF; } /* 待核验蓝色 */
+        .record-item[data-tab="done"] { border-left-color: #52c41a; } /* 已完成绿色 */
+        
+        .status-tag { position: absolute; right: 15px; top: 18px; padding: 4px 12px; color: #fff; font-size: 12px; border-radius: 4px; font-weight: 500; }
+        .st-todo { background-color: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; }
+        .st-done { background-color: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+        
+        .record-item h3 { font-size: 17px; font-weight: 600; color: #2c3e50; padding-right: 80px; margin-bottom: 18px; display: flex; align-items: center; }
+        
+        .layui-collapse { border: none; }
+        .layui-colla-item { border: 1px solid #f2f3f5; margin-bottom: 10px; border-radius: 6px !important; overflow: hidden; }
+        .layui-colla-title { background-color: #fafafa !important; font-size: 14px; height: 40px; line-height: 40px; color: #555; padding-left: 15px !important; padding-right: 40px !important; position: relative; }
+        .layui-colla-title .layui-colla-icon { left: auto !important; right: 15px !important; top: 10px; color: #999; }
+        .layui-colla-content { padding: 15px !important; border-top: none; color: #666; }
+        
+        .row-kv { display: flex; padding: 8px 0; align-items: flex-start; }
+        .k { width: 90px; color: #999; font-size: 13px; flex-shrink: 0; }
+        .v { flex: 1; color: #333; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+        .imgs img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; border: 1px solid #eee; margin-right: 5px; cursor: pointer; }
+        
+        .action-box { padding: 20px; background: #f0f5ff; border-radius: 8px; text-align: center; border: 1px dashed #adc6ff; }
+        .empty-state { text-align: center; padding: 60px 0; display: none; }
+        .empty-state i { font-size: 60px; color: #e0e0e0; margin-bottom: 15px; display: block; }
+        .empty-state p { color: #999; font-size: 14px; }
+        .phone-link a { color: #1E9FFF; text-decoration: none; }
+
+        /* === 图片预览带删除样式 === */
+        .upload-preview-item {
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        .upload-preview-item:hover { opacity: 0.8; border-color: #ff5722 !important; }
+        /* 删除角标 */
+        .upload-preview-item::after {
+            content: "×";
+            position: absolute; top: -5px; right: -5px;
+            background: #ff5722; color: #fff; border-radius: 50%;
+            width: 16px; height: 16px; text-align: center; line-height: 14px;
+            font-size: 14px; display: none;
+        }
+        .upload-preview-item:hover::after { display: block; }
+    </style>
+</head>
+<body>
+  <!-- Logo -->
+  <div class="brand-header">
+    <img src="{{ url_for('static', filename='photo/fxjk-logo.png') }}" class="brand-logo" alt="Logo">
+  </div>
+<div class="layui-tab layui-tab-brief" lay-filter="tab">
+    <ul class="layui-tab-title" style="text-align:center;">
+        <li class="layui-this" lay-id="todo">待核验</li>
+        <li lay-id="done">已核验</li>
+    </ul>
+</div>
+
+<div id="listBody" style="max-width: 900px; margin: 0 auto;">
+    {% for record in records %}
+    <!-- 统一标准 -->
+    <div class="card record-item" 
+         data-id="{{ record.id }}" 
+         data-status="{{ record.status }}"
+         data-tab="{{ 'todo' if record.status == 33 else 'done' }}">
+         <!-- 卡片内容... -->
+         
+        <span class="status-tag {{ 'st-todo' if record.status == 33 else 'st-done' }}">
+            {% if record.status == 12 %} 待到达现场
+            {% elif record.status == 22 %} 处理中
+            {% elif record.status == 32 %} 待【{{ record.use_department_name }}】验收
+            {% elif record.status == 33 %} 待【{{ record.outsourcing_unit_by_dept_name }}】核验
+            {% elif record.status == 34 %} 待核价
+            {% elif record.status == 35 %} 已核价
+            {% else %} 状态:{{ record.status }}
+            {% endif %}
+        </span>
+        
+        <h3>委外工单号 #{{ record.id }}</h3>
+        
+        <div class="layui-collapse">
+            <!-- 1.基础信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">1. 基础信息</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">关联工单</span><span class="v">{{ record.work_record_id }}</span></div>
+                    <div class="row-kv"><span class="k">发起时间</span><span class="v">{{ record.assigned_at }}</span></div>           
+                    <div class="row-kv"><span class="k">需求科室</span><span class="v">{{ record.use_department_name }}</span></div>
+                    <div class="row-kv"><span class="k">地点</span><span class="v">{{ record.location }}</span></div>
+                    <div class="row-kv"><span class="k">需求内容</span><span class="v">{{ record.demand }}</span></div>
+                    <div class="row-kv">
+                        <span class="k">联系电话</span>
+                        <span class="v phone-link"> <a href="tel:{{ record.contact_phone }}"><i class="layui-icon layui-icon-phone"></i> {{ record.contact_phone }}</a></span>
+                    </div>
+                    <div class="row-kv"><span class="k">备注</span><span class="v">{{ record.remark }}</span></div>
+                    <div class="row-kv"><span class="k">委外单位</span><span class="v">{{ record.unit_name }}</span></div>
+                </div>
+            </div>
+
+            {% if record.quoted_amount %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">2. 供应商实施信息</h2>
+                <div class="layui-colla-content layui-show">
+                    <div class="row-kv"><span class="k">响应时间</span><span class="v">{{ record.vendor_arrive_at }}</span></div>
+                    <div class="row-kv"><span class="k">完成时间</span><span class="v">{{ record.vendor_finished_at }}</span></div>
+                    <div class="row-kv"><span class="k">工程量概述</span><span class="v">{{ record.work_content }}</span></div>
+                    <div class="row-kv"><span class="k">完工图片</span><div class="v imgs" id="vp_{{record.id}}">
+                        {% for p in record.vendor_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('vp_{{record.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">申报报价</span><span class="v" style="color:#ff5722; font-weight:bold; font-size:large;">¥ {{ record.quoted_amount }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if record.use_department_username %}
+            <!-- 3.需求科室意见信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">3. 需求科室【{{ record.use_department_name }}】验收意见</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">验收结论</span><span class="v">{{ record.evaluation_comment }}</span></div>
+                    <div class="row-kv"><span class="k">验收人</span><span class="v">{{ record.use_department_username }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if record.manager_department_username %}
+            <!-- 4.管理科室核验历史 (已办状态显示) -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title">4. 管理科室【{{ record.outsourcing_unit_by_dept_name }}】验收意见</h2>
+                <div class="layui-colla-content">
+                    <div class="row-kv"><span class="k">验收结论</span><span class="v">{{ record.manager_evaluation }}</span></div>
+                    <div class="row-kv"><span class="k">核验图片</span><div class="v imgs" id="mp_{{record.id}}">
+                        {% for p in record.mgr_photos %}<img src="/vendor_photo/{{p}}" onclick="viewImgs('mp_{{record.id}}')">{% endfor %}
+                    </div></div>
+                    <div class="row-kv"><span class="k">验收人</span><span class="v">{{ record.manager_department_username }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if record.cherck_amount_user %}
+             <!-- 5.核价信息 -->
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title" style="color:#722ed1; font-weight: 600;">5. 核价信息</h2>
+                <div class="layui-colla-content">
+                        <div class="row-kv"><span class="k">核定金额</span><span class="v" style="color:#52c41a; font-weight: bold;font-size:large;">¥ {{ record.final_amount }}</span></div>
+                        <div class="row-kv"><span class="k">核价说明</span><span class="v">{{ record.final_amount_reason }}</span></div>
+                        <div class="row-kv"><span class="k">核价人</span><span class="v">{{ record.cherck_amount_user }}</span></div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 6.操作区：仅在状态33 (待核验) 时显示 -->
+            {% if record.status == 33 %}
+            <div class="layui-colla-item">
+                <h2 class="layui-colla-title" style="color:#1E9FFF; font-weight:bold;">管理科室核验操作</h2>
+                <div class="layui-colla-content layui-show">
+                    <div class="action-box">
+                        <textarea id="comment_{{record.id}}" class="layui-textarea" placeholder="请输入现场核验结论..." style="margin-bottom:15px;"></textarea>
+                        
+                        <div style="text-align:left; margin-bottom:15px;">
+                            <button type="button" class="layui-btn layui-btn-sm layui-btn-primary layui-border-blue" id="btnUp_{{record.id}}">
+                                <i class="layui-icon layui-icon-camera"></i> 上传核验照片(必填)
+                            </button>
+                            <p style="color:#999; font-size:12px; margin-top:5px;">* 最多5张，单张不超过5MB，点击图片可删除</p>
+                            <div class="preview-area" id="prev_{{record.id}}" style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;"></div>
+                        </div>
+
+                        <button class="layui-btn layui-btn-normal layui-btn-fluid" onclick="submitVerify({{record.id}})">
+                            <i class="layui-icon layui-icon-ok"></i> 确认核验并提交审价
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    <div id="emptyState" class="empty-state"><i class="layui-icon layui-icon-face-smile"></i><p>暂无待核验工单</p></div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['element', 'layer', 'upload', 'jquery'], function(){
+    var $ = layui.jquery, layer = layui.layer, element = layui.element, upload = layui.upload;
+    var fileMap = {}; // 存储不同工单的文件: { id: [files...] }
+    
+    // ==========================================
+    // 通用 Tab 切换逻辑 (所有页面通用)
+    // ==========================================
+    function checkEmpty(tabName) {
+        var visibleCount = 0;
+        $('.record-item').each(function(){
+            // 直接读取 HTML 中预计算好的 data-tab 属性
+            var itemTab = $(this).attr('data-tab'); 
+            
+            if(itemTab === tabName) {
+                $(this).show();
+                visibleCount++;
+            } else {
+                $(this).hide();
+            }
+        });
+
+        // 控制空状态图片的显示/隐藏
+        if(visibleCount === 0) {
+            $('#emptyState').show();
+        } else {
+            $('#emptyState').hide();
+        }
+    }
+
+    // 1. 初始化：默认显示待办 (todo)
+    checkEmpty('todo');
+
+    // 2. 监听 Tab 点击切换
+    // 注意：Tab 的 lay-id 必须设置为 'todo' 和 'done'
+    element.on('tab(tab)', function(data){
+        var selectedTab = $(this).attr('lay-id'); // 获取点击的 lay-id
+        checkEmpty(selectedTab);
+    });
+
+    
+    // 图片查看
+    window.viewImgs = function(id){ layer.photos({ photos: '#'+id, anim: 5, shade: 0.6 }); };
+
+    // 2. 初始化上传 (针对每一个待核验的工单)
+    $('.record-item[data-status="33"]').each(function(){
+        var id = $(this).data('id');
+        fileMap[id] = []; // 初始化该工单的文件数组
+
+        upload.render({
+            elem: '#btnUp_' + id, 
+            auto: false, 
+            multiple: true, 
+            accept: 'images',
+            choose: function(obj){
+                var files = this.files = obj.pushFile();
+
+                obj.preview(function(index, file, result){
+                    // === 限制 1: 检查文件大小 (5MB) ===
+                    if(file.size > 5 * 1024 * 1024) {
+                        delete files[index];
+                        layer.msg('文件 "' + file.name + '" 超过 5MB', {icon: 5, anim: 6});
+                        return;
+                    }
+
+                    // === 限制 2: 检查文件数量 (最多5张) ===
+                    if(fileMap[id].length >= 5) {
+                        delete files[index];
+                        layer.msg('最多只能上传 5 张图片', {icon: 5, anim: 6});
+                        return;
+                    }
+
+                    // --- 校验通过 ---
+                    // 1. 加入数组
+                    fileMap[id].push(file);
+
+                    // 2. 创建 DOM
+                    var $img = $('<div class="upload-preview-item" title="点击删除"><img src="'+ result +'" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid #eee"></div>');
+
+                    // 3. 绑定数据
+                    $img.data('file', file);
+                    $img.data('index', index);
+
+                    // 4. 点击删除逻辑
+                    $img.on('click', function(){
+                        var fileToRemove = $(this).data('file');
+                        var idxToRemove = $(this).data('index');
+
+                        // 从数组中移除
+                        fileMap[id] = fileMap[id].filter(function(f){ return f !== fileToRemove; });
+                        
+                        // 从 Layui 队列中移除
+                        delete files[idxToRemove];
+
+                        // 移除 DOM
+                        $(this).remove();
+                        layer.msg('图片已移除', {time: 800});
+                    });
+
+                    $('#prev_' + id).append($img);
+                });
+            }
+        });
+    });
+
+    // 3. 提交 API
+    window.submitVerify = function(id) {
+        var comment = $('#comment_'+id).val().trim();
+        var files = fileMap[id] || [];
+        
+        if(!comment) return layer.msg('请填写核验结论', {icon: 5, anim: 6});
+        if(files.length === 0) return layer.msg('请上传现场核验照片', {icon: 5, anim: 6});
+
+        var fd = new FormData();
+        fd.append('id', id);
+        fd.append('comment', comment);
+        $.each(files, function(i, f){ fd.append('photos[]', f); });
+
+        var loadIdx = layer.load(2);
+        $.ajax({
+            url: '/v/manager/api/confirm', 
+            type: 'POST', 
+            data: fd,
+            processData: false, 
+            contentType: false,
+            success: function(res){
+                layer.close(loadIdx);
+                if(res.code===0) { 
+                    layer.msg('核验成功', {icon:1, time: 1000}, function(){ location.reload(); }); 
+                } else { 
+                    layer.msg(res.msg, {icon:2}); 
+                }
+            },
+            error: function(){
+                layer.close(loadIdx);
+                layer.msg('网络请求失败', {icon:2});
+            }
+        });
+    };
+});
+</script>
+</body>
+</html>

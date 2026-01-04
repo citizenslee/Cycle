@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>步骤4：终审确认</title>
+    <link rel="stylesheet" href="/static/layui/css/layui.css">
+    <style>
+        body { padding: 20px; background: #f0f2f5; height: calc(100vh - 40px); overflow-y: auto; font-family: sans-serif; }
+        .report-container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        
+        .report-card { background: #fff; border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .report-title { font-size: 18px; font-weight: 800; color: #1e293b; margin-bottom: 20px; text-align: center; letter-spacing: 1px; }
+
+        /* 对比表格 */
+        .compare-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .compare-table th, .compare-table td { padding: 15px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+        .compare-table th { color: #64748b; font-weight: 500; font-size: 13px; }
+        .label-ai { color: #16baaa; font-weight: bold; font-style: italic; }
+        .label-user { color: #1E9FFF; font-weight: 800; font-size: 16px; }
+
+        /* 汇总小卡片 */
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .mini-box { background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .mini-box .title { font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
+        .mini-box .content { font-size: 14px; font-weight: 600; color: #334155; }
+
+        /* 物资微缩列表 */
+        .mat-tag { display: inline-block; background: #e6fffb; color: #16baaa; padding: 2px 10px; border-radius: 4px; font-size: 12px; margin-right: 5px; margin-bottom: 5px; border: 1px solid #b7eb8f; }
+
+        .final-remark { width: 100%; height: 80px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; box-sizing: border-box; resize: none; margin-top: 10px; }
+        
+        .success-icon { text-align: center; color: #16baaa; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="report-container">
+    <div class="report-card">
+        <div class="success-icon">
+            <i class="layui-icon layui-icon-survey" style="font-size: 48px;"></i>
+        </div>
+        <div class="report-title">工单结算终审报告</div>
+
+        <!-- 1. 分值核算对比区 -->
+        <table class="compare-table">
+            <thead>
+                <tr>
+                    <th width="30%">核算项目</th>
+                    <th width="35%">AI 建议值</th>
+                    <th width="35%">人工核定值</th>
+                </tr>
+            </thead>
+            <tbody id="scoreCompareBody">
+                <!-- 动态填充 -->
+            </tbody>
+        </table>
+
+        <!-- 2. 基础关联汇总区 -->
+        <div class="summary-grid">
+            <div class="mini-box">
+                <div class="title">关联人员</div>
+                <div class="content" id="finalStaff">--</div>
+            </div>
+            <div class="mini-box">
+                <div class="title">关联设备</div>
+                <div class="content" id="finalDevice">--</div>
+            </div>
+            <div class="mini-box" style="grid-column: span 2;">
+                <div class="title">物资消耗清单</div>
+                <div id="finalMaterials">--</div>
+            </div>
+        </div>
+
+        <!-- 3. 最终备注 -->
+        <div style="margin-top: 20px;">
+            <div style="font-size: 13px; font-weight: bold; color: #475569;">最终结算备注：</div>
+            <textarea id="finalRemark" class="final-remark" placeholder="在此输入最终完工说明（可选）..."></textarea>
+        </div>
+    </div>
+</div>
+
+<script src="/static/layui/layui.js"></script>
+<script>
+layui.use(['jquery', 'layer'], function(){
+    var $ = layui.jquery, layer = layui.layer;
+
+    // --- 1. 汇总渲染函数 (供父页面调用) ---
+    window.renderSummary = function() {
+        var data = parent.WORK_ORDER_DATA;
+        
+        // A. 渲染评分对比表
+        var scoreRows = [
+            { label: '基础分值', ai: data.ai_suggested.base_score, user: data.scores.base_score },
+            { label: '难度系数', ai: data.ai_suggested.coefficient, user: data.scores.coefficient },
+            { label: '响应得分', ai: data.ai_suggested.arrive_score, user: data.scores.arrive_score },
+            { label: '效率得分', ai: data.ai_suggested.repair_score, user: data.scores.repair_score },
+            { 
+                label: '最终总计 (Points)',
+                ai: data.ai_suggested.base_score*data.ai_suggested.coefficient
+                    + data.ai_suggested.arrive_score
+                    + data.ai_suggested.repair_score,
+                user: data.scores.total_score,
+                highlight: true
+            }
+        ];
+
+
+        var html = '';
+        scoreRows.forEach(row => {
+            html += `<tr>
+                <td>${row.label}</td>
+                <td class="label-ai">${row.ai || '0'}</td>
+                <td class="${row.highlight ? 'total-amount' : 'label-user'}" style="${row.highlight ? 'color:#FF5722; font-size:24px; font-weight:800;' : ''}">
+                    ${row.user}
+                </td>
+            </tr>`;
+        });
+        $('#scoreCompareBody').html(html);
+
+        // B. 渲染人员与设备
+        $('#finalStaff').text(data.staff_str || '未选择人员');
+        $('#finalDevice').html(data.device_name ? (data.device_name + '<br><small style="color:#94a3b8; font-weight:normal;">' + (data.device_full_path || '') + '</small>') : '无关联设备');
+
+        // C. 渲染物资
+        if(data.materials && data.materials.length > 0) {
+            var mHtml = '';
+            data.materials.forEach(m => {
+                mHtml += `<span class="mat-tag">${m.name} x ${m.qty}</span>`;
+            });
+            mHtml += `<div style="margin-top:8px; font-size:12px; color:#FF5722; font-weight:bold;">合计物料费：￥${data.total_mat_cost}</div>`;
+            $('#finalMaterials').html(mHtml);
+        } else {
+            $('#finalMaterials').text('本次无物料消耗');
+        }
+    };
+
+    // --- 2. 执行最终提交 ---
+    window.doSubmit = function() {
+        var data = parent.WORK_ORDER_DATA;
+        data.remark = $('#finalRemark').val(); // 获取备注
+
+        var loading = layer.msg('正在处理账单并归档...', {icon: 16, shade: 0.3, time: 0});
+
+        $.ajax({
+            url: '/orders/api/settle/submit',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(res) {
+                layer.close(loading);
+                if(res.code === 0) {
+                    layer.msg('工单结算成功！', {icon: 1, time: 1500}, function(){
+                        // 关闭主 layer 弹窗并刷新父页面列表
+                        var index = parent.parent.layer.getFrameIndex(parent.window.name);
+                        parent.parent.layui.table.reload('currentTableId');
+                        parent.parent.layer.close(index);
+                    });
+                } else {
+                    layer.alert(res.msg, {icon: 2});
+                }
+            }
+        });
+    };
+
+    // 初始加载一次
+    renderSummary();
+});
+</script>
+</body>
+</html>
