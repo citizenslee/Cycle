@@ -11,7 +11,6 @@ class Hospital(db.Model):
     id_hospital = db.Column(db.Integer, primary_key=True, autoincrement=True)
     area_name = db.Column(db.String(255))
     hospital_name = db.Column(db.String(255))
-
     # 关系: 一个医院有多个科室
     departments = db.relationship('Department', backref='hospital', lazy='dynamic')
 
@@ -157,7 +156,6 @@ class DelWorkOrder(db.Model):
     id = db.Column(db.String(50), primary_key=True)
     delete_reason = db.Column(db.Text)
     deleted_at = db.Column(db.String(50))
-    # ... 其他字段省略或根据需要按需添加，因为是备份表通常不需要ORM操作 ...
     demand = db.Column(db.Text)
     work_type = db.Column(db.String(50))
     location = db.Column(db.String(255))
